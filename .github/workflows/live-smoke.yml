@@ -1,0 +1,30 @@
+name: Live Smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      health_url:
+        description: Full health endpoint URL, e.g. https://your-app.onrender.com/api/health
+        required: true
+        type: string
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Hit live health endpoint
+        run: |
+          echo "Checking ${{ inputs.health_url }}"
+          curl --fail --show-error --silent "${{ inputs.health_url }}" | tee health.json
+
+      - name: Validate health payload
+        run: |
+          python3 - <<'PY'
+          import json
+          with open("health.json", "r", encoding="utf-8") as f:
+              data = json.load(f)
+          assert data["status"] in {"ok", "degraded"}
+          assert "checks" in data
+          print(json.dumps(data, indent=2))
+          PY

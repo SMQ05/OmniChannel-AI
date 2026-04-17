@@ -1,0 +1,38 @@
+services:
+  - type: web
+    name: kynex-omnichannel-ai-web
+    env: php
+    plan: starter
+    healthCheckPath: /api/health
+    buildCommand: |
+      composer install --no-dev --optimize-autoloader
+      php artisan migrate --force
+      php artisan config:cache
+      php artisan view:cache
+    startCommand: php artisan serve --host=0.0.0.0 --port=$PORT
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: APP_DEBUG
+        value: "false"
+      - key: QUEUE_CONNECTION
+        value: database
+      - key: CACHE_STORE
+        value: database
+      - key: SESSION_DRIVER
+        value: database
+
+  - type: worker
+    name: kynex-omnichannel-ai-worker
+    env: php
+    plan: starter
+    buildCommand: composer install --no-dev --optimize-autoloader
+    startCommand: php artisan queue:work ${QUEUE_CONNECTION} --queue=webhooks,integrations,reminders --sleep=1 --tries=3 --timeout=120 --max-time=3600
+
+  - type: cron
+    name: kynex-omnichannel-ai-scheduler
+    env: php
+    plan: starter
+    schedule: "* * * * *"
+    buildCommand: composer install --no-dev --optimize-autoloader
+    startCommand: php artisan schedule:run

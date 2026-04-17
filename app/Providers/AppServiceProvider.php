@@ -1,0 +1,67 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Providers;
+
+use App\Http\Middleware\RequireSuperAdmin;
+use App\Voice\Contracts\LlmStreamInterface;
+use App\Voice\Contracts\SpeechToTextInterface;
+use App\Voice\Contracts\TelephonyTransportInterface;
+use App\Voice\Contracts\TextToSpeechInterface;
+use App\Voice\Null\NullLlmStream;
+use App\Voice\Null\NullSpeechToText;
+use App\Voice\Null\NullTelephonyTransport;
+use App\Voice\Null\NullTextToSpeech;
+use Illuminate\Support\Facades\Route;
+use Illuminate\Support\ServiceProvider;
+
+/**
+ * Application Service Provider.
+ *
+ * Responsible for:
+ *  - Routing named job classes to their designated Redis queues so
+ *    Horizon can process each queue tier independently.
+ *  - Any application-level bindings that do not belong in a
+ *    domain-specific provider.
+ *
+ * Queue topology:
+ *  webhooks     — inbound Meta webhook payloads (latency-sensitive)
+ *  ai           — AI agent invocations (reserved for Phase 3 direct dispatch)
+ *  reminders    — outbound reminder messages
+ *  integrations — Google Calendar / Sheets sync
+ */
+class AppServiceProvider extends ServiceProvider
+{
+    /**
+     * Register any application services.
+     */
+    public function register(): void
+    {
+        $this->app->singleton(TelephonyTransportInterface::class, NullTelephonyTransport::class);
+        $this->app->singleton(SpeechToTextInterface::class, NullSpeechToText::class);
+        $this->app->singleton(LlmStreamInterface::class, NullLlmStream::class);
+        $this->app->singleton(TextToSpeechInterface::class, NullTextToSpeech::class);
+    }
+
+    /**
+     * Bootstrap any application services.
+     *
+     * Queue routing uses Queue::route() introduced in Laravel 11+ to
+     * declaratively bind job classes to specific connection/queue pairs
+     * without touching each job's $queue property.
+     */
+    public function boot(): void
+    {
+        $this->registerMiddlewareAliases();
+    }
+
+    /**
+     * Register middleware aliases for use in route files.
+     */
+    private function registerMiddlewareAliases(): void
+    {
+        Route::aliasMiddleware('super_admin', RequireSuperAdmin::class);
+    }
+
+}

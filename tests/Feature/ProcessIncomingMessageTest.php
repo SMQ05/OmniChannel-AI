@@ -1,0 +1,122 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Tests\Feature;
+
+use App\Ai\Agents\AppointmentAgent;
+use App\Jobs\ProcessIncomingMessage;
+use App\Models\Business;
+use App\Models\InboundWebhook;
+use App\Models\Provider;
+use App\Services\AppointmentOrchestrator;
+use App\Services\SlotCalculatorService;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
+use Tests\TestCase;
+
+class ProcessIncomingMessageTest extends TestCase
+{
+    use RefreshDatabase;
+
+    public function test_inbound_job_processes_and_sends_reply(): void
+    {
+        Http::fake([
+            'graph.facebook.com/*' => Http::response(['messages' => [['id' => 'wamid.reply.1']]], 200),
+        ]);
+
+        $business = Business::query()->create([
+            'name' => 'Clinic',
+            'business_type' => 'clinic',
+            'slug' => 'clinic',
+            'timezone' => 'UTC',
+            'locale' => 'en',
+            'channel_config' => [
+                'whatsapp' => [
+                    'enabled' => true,
+                    'phone_number_id' => '123456',
+                    'access_token' => 'token',
+                    'verify_token' => 'verify-token',
+                    'app_secret' => 'meta-app-secret',
+                ],
+            ],
+            'integration_config' => [],
+            'reminder_settings' => [],
+            'ai_config' => ['llm_provider' => 'claude', 'business_phone' => '15550001111'],
+            'is_active' => true,
+            'plan' => 'trial',
+        ]);
+
+        Provider::query()->create([
+            'business_id' => $business->id,
+            'name' => 'Dr Test',
+            'working_hours' => ['monday' => ['active' => true, 'start' => '09:00', 'end' => '17:00']],
+            'slot_duration_minutes' => 30,
+            'is_active' => true,
+        ]);
+
+        $webhook = InboundWebhook::query()->create([
+            'business_id' => $business->id,
+            'channel' => 'whatsapp',
+            'business_slug' => $business->slug,
+            'correlation_id' => (string) \Illuminate\Support\Str::uuid(),
+            'idempotency_key' => sha1('test'),
+            'external_message_id' => 'wamid.test.1',
+            'sender_platform_id' => '15551234567',
+            'sender_name' => 'Patient',
+            'message_text' => 'hello',
+            'message_type' => 'text',
+            'payload' => ['example' => true],
+            'normalized_payload' => ['text' => 'hello'],
+            'signature_valid' => true,
+            'status' => 'received',
+            'received_at' => now(),
+        ]);
+
+        $this->app->instance(SlotCalculatorService::class, new class extends SlotCalculatorService {
+            public function compute(\Illuminate\Support\Collection $providers, string $timezone, int $days = 7): array
+            {
+                return [];
+            }
+        });
+
+        $this->app->instance(AppointmentAgent::class, new class extends AppointmentAgent {
+            public function handle(\App\Models\Business $business, \App\Models\ConversationLog $conversationLog, array $availableSlots, string $inboundText): array
+            {
+                return [
+                    'intent' => 'faq',
+                    'provider_id' => null,
+                    'date' => null,
+                    'time' => null,
+                    'service_type' => null,
+                    'reply_text' => 'Thanks for your message.',
+                    'needs_human' => false,
+                ];
+            }
+        });
+
+        $this->app->instance(AppointmentOrchestrator::class, new class extends AppointmentOrchestrator {
+            public function execute(\App\Models\Business $business, \App\Models\Patient $patient, \App\Models\ConversationLog $conversationLog, array $agentResponse, string $channel): string
+            {
+                return 'Thanks for your message.';
+            }
+        });
+
+        $job = new ProcessIncomingMessage($webhook->id);
+        $this->app->call([$job, 'handle']);
+
+        $this->assertDatabaseHas('inbound_webhooks', [
+            'id' => $webhook->id,
+            'status' => 'processed',
+        ]);
+        $this->assertDatabaseHas('outbound_message_attempts', [
+            'business_id' => $business->id,
+            'channel' => 'whatsapp',
+            'status' => 'sent',
+        ]);
+        $this->assertDatabaseHas('conversation_logs', [
+            'business_id' => $business->id,
+            'channel' => 'whatsapp',
+        ]);
+    }
+}

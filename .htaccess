@@ -1,0 +1,12 @@
+<IfModule mod_rewrite.c>
+    RewriteEngine on
+    # Forward all requests to the public folder safely
+    RewriteCond %{REQUEST_URI} !^/public/
+    RewriteRule ^(.*)$ public/$1 [L]
+</IfModule>
+
+# Block access to the .env file for security
+<Files .env>
+    Order allow,deny
+    Deny from all
+</Files>

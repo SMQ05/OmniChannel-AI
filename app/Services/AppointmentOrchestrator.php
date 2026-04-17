@@ -1,0 +1,439 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Services;
+
+use App\Jobs\SyncAppointmentJob;
+use App\Models\Appointment;
+use App\Models\Business;
+use App\Models\ConversationLog;
+use App\Models\Patient;
+use App\Models\Provider;
+use Carbon\Carbon;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Throwable;
+
+/**
+ * AppointmentOrchestrator — executes the intent returned by AppointmentAgent.
+ *
+ * Handles five intent types:
+ *  - book        → verify slot, create Appointment, dispatch SyncAppointmentJob
+ *  - cancel      → find upcoming appointment, cancel it, dispatch sync
+ *  - reschedule  → cancel old, book new, dispatch sync for both
+ *  - faq         → no DB write, pass reply_text through
+ *  - handoff     → set human_mode on ConversationLog + Redis, alert staff
+ *
+ * Timezone contract:
+ *  The AgentResponse date/time fields are in the BUSINESS's local timezone.
+ *  This class converts them to UTC before every DB write, satisfying the
+ *  UTC-only storage rule.
+ *
+ * Race-condition protection:
+ *  Before confirming a booking the slot is re-verified inside a DB
+ *  transaction with a row-level lock on the provider's appointments to
+ *  prevent double-booking under concurrent requests.
+ *
+ * @phpstan-type AgentResponse array{
+ *     intent:       string,
+ *     provider_id:  int|null,
+ *     date:         string|null,
+ *     time:         string|null,
+ *     service_type: string|null,
+ *     reply_text:   string,
+ *     needs_human:  bool,
+ * }
+ */
+class AppointmentOrchestrator
+{
+    /** Redis key prefix for human-mode flags (mirrors ProcessIncomingMessage). */
+    private const HUMAN_MODE_PREFIX = 'human_mode';
+
+    /** TTL for the human-mode Redis flag (seconds). */
+    private const HUMAN_MODE_TTL = 86400; // 24 hours
+
+    /**
+     * Execute the AI agent's intent and return the reply text to send
+     * to the patient.
+     *
+     * @param  Business          $business        The active tenant
+     * @param  Patient           $patient         The messaging patient
+     * @param  ConversationLog   $conversationLog The current session (mutated in-place for handoff)
+     * @param  AgentResponse     $agentResponse   Parsed AI response
+     * @param  string            $channel         'whatsapp' or 'messenger'
+     * @return string            The reply text to dispatch to the patient
+     */
+    public function execute(
+        Business $business,
+        Patient $patient,
+        ConversationLog $conversationLog,
+        array $agentResponse,
+        string $channel,
+    ): string {
+        // Escalate to human immediately if the agent flagged needs_human,
+        // regardless of the intent value.
+        if ($agentResponse['needs_human']) {
+            $agentResponse['intent'] = 'handoff';
+        }
+
+        return match ($agentResponse['intent']) {
+            'book'        => $this->handleBook($business, $patient, $agentResponse),
+            'cancel'      => $this->handleCancel($business, $patient, $agentResponse),
+            'reschedule'  => $this->handleReschedule($business, $patient, $agentResponse),
+            'handoff'     => $this->handleHandoff($business, $patient, $conversationLog, $agentResponse),
+            default       => $agentResponse['reply_text'], // 'faq' and any unknown intent
+        };
+    }
+
+    // -------------------------------------------------------------------------
+    // Intent Handlers
+    // -------------------------------------------------------------------------
+
+    /**
+     * Handle the 'book' intent.
+     *
+     * 1. Validate required fields are present in the agent response.
+     * 2. Re-verify the slot is still free inside a DB transaction.
+     * 3. Create the Appointment with UTC timestamps.
+     * 4. Dispatch SyncAppointmentJob.
+     * 5. Return a confirmation reply.
+     *
+     * @param  Business       $business
+     * @param  Patient        $patient
+     * @param  AgentResponse  $agentResponse
+     */
+    private function handleBook(
+        Business $business,
+        Patient $patient,
+        array $agentResponse,
+    ): string {
+        if (!$this->hasBookingFields($agentResponse)) {
+            Log::warning('AppointmentOrchestrator: book intent missing required fields.', [
+                'business_id'   => $business->id,
+                'agent_response' => $agentResponse,
+            ]);
+
+            return $agentResponse['reply_text'];
+        }
+
+        $provider = $this->resolveProvider($business, (int) $agentResponse['provider_id']);
+
+        if ($provider === null) {
+            return "I couldn't find that provider. Could you let me know your preferred provider or would you like me to suggest one?";
+        }
+
+        // Convert local business time → UTC for DB storage
+        [$startUtc, $endUtc] = $this->toUtcWindow(
+            date: (string) $agentResponse['date'],
+            time: (string) $agentResponse['time'],
+            timezone: $business->timezone,
+            durationMinutes: $provider->slot_duration_minutes,
+        );
+
+        try {
+            $appointment = DB::transaction(function () use (
+                $business, $patient, $provider, $agentResponse, $startUtc, $endUtc
+            ): Appointment {
+                // Row-level check: re-verify the slot is free under lock
+                $conflict = Appointment::withoutGlobalScope(\App\Models\Concerns\TenantScope::class)
+                    ->where('provider_id', $provider->id)
+                    ->whereIn('status', ['confirmed', 'pending'])
+                    ->where('start_time', '<', $endUtc)
+                    ->where('end_time', '>', $startUtc)
+                    ->lockForUpdate()
+                    ->exists();
+
+                if ($conflict) {
+                    throw new \RuntimeException('slot_taken');
+                }
+
+                return Appointment::create([
+                    'business_id'  => $business->id,
+                    'provider_id'  => $provider->id,
+                    'patient_id'   => $patient->id,
+                    'service_type' => (string) ($agentResponse['service_type'] ?? 'Appointment'),
+                    'start_time'   => $startUtc,
+                    'end_time'     => $endUtc,
+                    'status'       => 'confirmed',
+                    'booked_via'   => $patient->platform,
+                ]);
+            });
+        } catch (\RuntimeException $e) {
+            if ($e->getMessage() === 'slot_taken') {
+                Log::info('AppointmentOrchestrator: slot was taken by a concurrent booking.', [
+                    'business_id' => $business->id,
+                    'provider_id' => $provider->id,
+                    'start_utc'   => $startUtc,
+                ]);
+
+                return "I'm sorry, that slot was just taken! Could you choose another time? Here are the latest available options.";
+            }
+
+            throw $e;
+        }
+
+        SyncAppointmentJob::dispatch($appointment);
+
+        Log::info('AppointmentOrchestrator: appointment booked.', [
+            'appointment_id' => $appointment->id,
+            'business_id'    => $business->id,
+        ]);
+
+        return $agentResponse['reply_text'];
+    }
+
+    /**
+     * Handle the 'cancel' intent.
+     *
+     * Finds the patient's next upcoming confirmed appointment matching
+     * the date/provider hint from the agent response (if provided), or
+     * the nearest upcoming appointment if no specific details were given.
+     *
+     * @param  Business       $business
+     * @param  Patient        $patient
+     * @param  AgentResponse  $agentResponse
+     */
+    private function handleCancel(
+        Business $business,
+        Patient $patient,
+        array $agentResponse,
+    ): string {
+        $query = Appointment::withoutGlobalScope(\App\Models\Concerns\TenantScope::class)
+            ->where('business_id', $business->id)
+            ->where('patient_id', $patient->id)
+            ->where('status', 'confirmed')
+            ->where('start_time', '>', Carbon::now()->utc());
+
+        // Narrow by provider if the agent identified one
+        if ($agentResponse['provider_id'] !== null) {
+            $query->where('provider_id', $agentResponse['provider_id']);
+        }
+
+        // Narrow by date if the agent identified one
+        if ($agentResponse['date'] !== null) {
+            $localDate = Carbon::parse($agentResponse['date'], $business->timezone);
+            $query->whereDate('start_time', $localDate->utc()->toDateString());
+        }
+
+        $appointment = $query->orderBy('start_time')->first();
+
+        if ($appointment === null) {
+            return "I couldn't find an upcoming appointment to cancel. Could you give me more details about which appointment you'd like to cancel?";
+        }
+
+        $appointment->update(['status' => 'cancelled']);
+
+        SyncAppointmentJob::dispatch($appointment);
+
+        Log::info('AppointmentOrchestrator: appointment cancelled.', [
+            'appointment_id' => $appointment->id,
+            'business_id'    => $business->id,
+        ]);
+
+        return $agentResponse['reply_text'];
+    }
+
+    /**
+     * Handle the 'reschedule' intent.
+     *
+     * Cancels the patient's current appointment and books a new one.
+     * Both operations are wrapped in a single DB transaction.
+     * A SyncAppointmentJob is dispatched for each affected appointment.
+     *
+     * @param  Business       $business
+     * @param  Patient        $patient
+     * @param  AgentResponse  $agentResponse
+     */
+    private function handleReschedule(
+        Business $business,
+        Patient $patient,
+        array $agentResponse,
+    ): string {
+        if (!$this->hasBookingFields($agentResponse)) {
+            return $agentResponse['reply_text'];
+        }
+
+        $provider = $this->resolveProvider($business, (int) $agentResponse['provider_id']);
+
+        if ($provider === null) {
+            return "I couldn't find that provider. Could you let me know which provider you'd like to reschedule with?";
+        }
+
+        [$newStartUtc, $newEndUtc] = $this->toUtcWindow(
+            date: (string) $agentResponse['date'],
+            time: (string) $agentResponse['time'],
+            timezone: $business->timezone,
+            durationMinutes: $provider->slot_duration_minutes,
+        );
+
+        try {
+            [$oldAppointment, $newAppointment] = DB::transaction(function () use (
+                $business, $patient, $provider, $agentResponse, $newStartUtc, $newEndUtc
+            ): array {
+                // Locate the existing appointment to cancel
+                $old = Appointment::withoutGlobalScope(\App\Models\Concerns\TenantScope::class)
+                    ->where('business_id', $business->id)
+                    ->where('patient_id', $patient->id)
+                    ->where('status', 'confirmed')
+                    ->where('start_time', '>', Carbon::now()->utc())
+                    ->orderBy('start_time')
+                    ->lockForUpdate()
+                    ->first();
+
+                if ($old === null) {
+                    throw new \RuntimeException('no_existing_appointment');
+                }
+
+                $old->update(['status' => 'cancelled']);
+
+                // Check the new slot is free
+                $conflict = Appointment::withoutGlobalScope(\App\Models\Concerns\TenantScope::class)
+                    ->where('provider_id', $provider->id)
+                    ->whereIn('status', ['confirmed', 'pending'])
+                    ->where('start_time', '<', $newEndUtc)
+                    ->where('end_time', '>', $newStartUtc)
+                    ->lockForUpdate()
+                    ->exists();
+
+                if ($conflict) {
+                    throw new \RuntimeException('slot_taken');
+                }
+
+                $new = Appointment::create([
+                    'business_id'  => $business->id,
+                    'provider_id'  => $provider->id,
+                    'patient_id'   => $patient->id,
+                    'service_type' => (string) ($agentResponse['service_type'] ?? $old->service_type),
+                    'start_time'   => $newStartUtc,
+                    'end_time'     => $newEndUtc,
+                    'status'       => 'confirmed',
+                    'booked_via'   => $patient->platform,
+                ]);
+
+                return [$old, $new];
+            });
+        } catch (\RuntimeException $e) {
+            return match ($e->getMessage()) {
+                'no_existing_appointment' => "I couldn't find an existing appointment to reschedule. Could you give me more details?",
+                'slot_taken'              => "I'm sorry, that new slot was just taken! Could you choose another time?",
+                default                   => throw $e,
+            };
+        }
+
+        SyncAppointmentJob::dispatch($oldAppointment);
+        SyncAppointmentJob::dispatch($newAppointment);
+
+        Log::info('AppointmentOrchestrator: appointment rescheduled.', [
+            'old_appointment_id' => $oldAppointment->id,
+            'new_appointment_id' => $newAppointment->id,
+            'business_id'        => $business->id,
+        ]);
+
+        return $agentResponse['reply_text'];
+    }
+
+    /**
+     * Handle the 'handoff' intent.
+     *
+     * 1. Sets human_mode = true on the ConversationLog (mutated in-place).
+     * 2. Writes the human-mode flag to Redis so subsequent messages in
+     *    this session are silently discarded by ProcessIncomingMessage.
+     * 3. Dispatches a staff alert via the dashboard notification system.
+     *
+     * @param  Business          $business
+     * @param  Patient           $patient
+     * @param  ConversationLog   $conversationLog  Mutated in-place
+     * @param  AgentResponse     $agentResponse
+     */
+    private function handleHandoff(
+        Business $business,
+        Patient $patient,
+        ConversationLog $conversationLog,
+        array $agentResponse,
+    ): string {
+        // Mark the session as human-mode in the model (persisted by the job caller)
+        $conversationLog->flagHumanHandoff();
+
+        // Write the Redis flag so ProcessIncomingMessage fast-paths on the next turn
+        $humanModeKey = implode(':', [
+            self::HUMAN_MODE_PREFIX,
+            $business->id,
+            $patient->platform,
+            $patient->platform_user_id,
+        ]);
+
+        Cache::put($humanModeKey, true, self::HUMAN_MODE_TTL);
+
+        Log::info('AppointmentOrchestrator: human handoff triggered.', [
+            'business_id' => $business->id,
+            'patient_id'  => $patient->id,
+        ]);
+
+        // TODO Phase 6: dispatch a dashboard broadcast notification to staff here.
+
+        return $agentResponse['reply_text'];
+    }
+
+    // -------------------------------------------------------------------------
+    // Helpers
+    // -------------------------------------------------------------------------
+
+    /**
+     * Determine whether the agent response contains all fields required
+     * to create a booking.
+     *
+     * @param  AgentResponse  $agentResponse
+     */
+    private function hasBookingFields(array $agentResponse): bool
+    {
+        return $agentResponse['provider_id'] !== null
+            && $agentResponse['date'] !== null
+            && $agentResponse['time'] !== null;
+    }
+
+    /**
+     * Resolve a Provider that belongs to the given business.
+     *
+     * Returns null if the provider does not exist or does not belong
+     * to this tenant (prevents cross-tenant data access).
+     *
+     * @param  Business  $business
+     * @param  int       $providerId
+     */
+    private function resolveProvider(Business $business, int $providerId): ?Provider
+    {
+        return Provider::withoutGlobalScope(\App\Models\Concerns\TenantScope::class)
+            ->where('id', $providerId)
+            ->where('business_id', $business->id)
+            ->where('is_active', true)
+            ->first();
+    }
+
+    /**
+     * Convert a local date + time string pair to a UTC [start, end] window.
+     *
+     * The AgentResponse carries local business-timezone times; all DB writes
+     * must be UTC. This method is the single UTC conversion point for the
+     * orchestrator, enforcing the project-wide UTC storage rule.
+     *
+     * @param  string  $date             'YYYY-MM-DD' in business timezone
+     * @param  string  $time             'HH:MM' in business timezone
+     * @param  string  $timezone         Business timezone identifier
+     * @param  int     $durationMinutes  Slot length in minutes
+     * @return array{0: Carbon, 1: Carbon}  [startUtc, endUtc]
+     */
+    private function toUtcWindow(
+        string $date,
+        string $time,
+        string $timezone,
+        int $durationMinutes,
+    ): array {
+        $startLocal = Carbon::parse("{$date} {$time}", $timezone);
+        $startUtc   = $startLocal->utc();
+        $endUtc     = $startUtc->copy()->addMinutes($durationMinutes);
+
+        return [$startUtc, $endUtc];
+    }
+}
