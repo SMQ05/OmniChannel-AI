@@ -74,7 +74,7 @@ class SubscriptionSettingsPageTest extends TestCase
 
         $response->assertOk();
         $response->assertSee('Usage & Plan');
-        $response->assertSee('Starter');
+        $response->assertSee('Launch');
         $response->assertSee('Quota Usage');
     }
 }

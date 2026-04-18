@@ -15,9 +15,19 @@ use App\Http\Controllers\Settings\IntegrationSettingsController;
 use App\Http\Controllers\Settings\ReminderSettingsController;
 use App\Http\Controllers\Settings\SubscriptionSettingsController;
 use App\Http\Controllers\Settings\VoiceSettingsController;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
-Route::redirect('/', '/dashboard');
+Route::get('/', function (Request $request) {
+    if ($request->user() !== null) {
+        return redirect()->route('dashboard');
+    }
+
+    return view('marketing.home');
+})->name('marketing.home');
+
+Route::view('/features', 'marketing.features')->name('marketing.features');
+Route::view('/pricing', 'marketing.pricing')->name('marketing.pricing');
 
 // Public Pages (Required by Meta App Review)
 Route::view('/privacy-policy', 'privacy-policy')->name('privacy.policy');
