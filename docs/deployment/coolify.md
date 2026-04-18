@@ -8,6 +8,7 @@ This repository now supports Coolify's Dockerfile deployment mode.
 - Build pack: Dockerfile
 - Dockerfile location: `./Dockerfile`
 - Port: `8080`
+- PHP runtime: `8.4`
 
 ## Required Environment Variables
 
@@ -52,4 +53,5 @@ The container starts three processes under Supervisor:
 ## Notes
 
 - `.dockerignore` excludes local secrets and the untracked `personal/` directory from the build context.
+- The current dependency set targets PHP `8.4`, so Coolify must build this image with the included PHP 8.4 Docker base.
 - If you later split web, worker, and scheduler into separate Coolify services, remove the extra Supervisor programs and run dedicated start commands per service instead.

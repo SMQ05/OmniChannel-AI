@@ -1,48 +1,4 @@
-FROM php:8.3-cli-bookworm AS vendor
-
-WORKDIR /app
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    git \
-    libicu-dev \
-    libonig-dev \
-    libpq-dev \
-    libxml2-dev \
-    libzip-dev \
-    unzip \
-    && docker-php-ext-install \
-    bcmath \
-    intl \
-    mbstring \
-    pcntl \
-    pdo_mysql \
-    pdo_pgsql \
-    zip \
-    && rm -rf /var/lib/apt/lists/*
-
-COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
-
-COPY composer.json composer.lock ./
-RUN composer install \
-    --no-dev \
-    --no-interaction \
-    --prefer-dist \
-    --optimize-autoloader \
-    --no-scripts
-
-FROM node:20-bookworm-slim AS frontend
-
-WORKDIR /app
-
-COPY package.json package-lock.json ./
-RUN npm ci
-
-COPY resources ./resources
-COPY public ./public
-COPY vite.config.js ./
-RUN npm run build
-
-FROM php:8.3-cli-bookworm
+FROM php:8.4-cli-bookworm AS php-base
 
 WORKDIR /var/www/html
 
@@ -68,10 +24,39 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     mbstring \
     opcache \
     pcntl \
+    posix \
     pdo_mysql \
     pdo_pgsql \
     zip \
     && rm -rf /var/lib/apt/lists/*
+
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
+
+FROM php-base AS vendor
+
+WORKDIR /app
+
+COPY composer.json composer.lock ./
+RUN composer install \
+    --no-dev \
+    --no-interaction \
+    --prefer-dist \
+    --optimize-autoloader \
+    --no-scripts
+
+FROM node:20-bookworm-slim AS frontend
+
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+RUN npm ci
+
+COPY resources ./resources
+COPY public ./public
+COPY vite.config.js ./
+RUN npm run build
+
+FROM php-base AS runtime
 
 COPY . .
 COPY --from=vendor /app/vendor ./vendor
