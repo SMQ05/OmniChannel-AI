@@ -10,6 +10,7 @@ use App\Voice\Contracts\LlmStreamInterface;
 use App\Voice\Contracts\SpeechToTextInterface;
 use App\Voice\Contracts\TelephonyTransportInterface;
 use App\Voice\Contracts\TextToSpeechInterface;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\ServiceProvider;
@@ -56,6 +57,7 @@ class AppServiceProvider extends ServiceProvider
         }
 
         $this->registerMiddlewareAliases();
+        $this->registerHorizonGate();
     }
 
     /**
@@ -64,6 +66,18 @@ class AppServiceProvider extends ServiceProvider
     private function registerMiddlewareAliases(): void
     {
         Route::aliasMiddleware('super_admin', RequireSuperAdmin::class);
+    }
+
+    /**
+     * Allow Horizon access to authenticated super_admin users when Redis mode is enabled.
+     */
+    private function registerHorizonGate(): void
+    {
+        if (!class_exists(\Laravel\Horizon\Horizon::class)) {
+            return;
+        }
+
+        Gate::define('viewHorizon', fn (?object $user): bool => $user instanceof \App\Models\User && $user->isSuperAdmin());
     }
 
 }
