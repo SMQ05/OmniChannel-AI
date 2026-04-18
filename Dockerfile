@@ -1,23 +1,22 @@
-FROM php:8.4-cli-bookworm AS php-base
+FROM php:8.4-fpm-alpine AS php-base
 
 WORKDIR /var/www/html
 
 ENV APP_ENV=production
 ENV LOG_CHANNEL=stderr
-ENV PORT=8080
+ENV LOG_LEVEL=error
 ENV QUEUE_CONNECTION=database
 ENV QUEUE_NAMES=webhooks,integrations,reminders
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl \
+RUN apk add --no-cache \
     git \
-    libicu-dev \
-    libonig-dev \
+    icu-dev \
     libpq-dev \
-    libxml2-dev \
     libzip-dev \
-    supervisor \
+    oniguruma-dev \
+    su-exec \
     unzip \
+    zip \
     && docker-php-ext-install \
     bcmath \
     intl \
@@ -27,8 +26,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     posix \
     pdo_mysql \
     pdo_pgsql \
-    zip \
-    && rm -rf /var/lib/apt/lists/*
+    zip
 
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
@@ -44,7 +42,7 @@ RUN composer install \
     --optimize-autoloader \
     --no-scripts
 
-FROM node:20-bookworm-slim AS frontend
+FROM node:20-alpine AS frontend
 
 WORKDIR /app
 
@@ -61,16 +59,18 @@ FROM php-base AS runtime
 COPY . .
 COPY --from=vendor /app/vendor ./vendor
 COPY --from=frontend /app/public/build ./public/build
-COPY docker/start-container.sh /usr/local/bin/start-container
+COPY docker/bootstrap-runtime.sh /usr/local/bin/bootstrap-runtime
+COPY docker/start-app.sh /usr/local/bin/start-app
 COPY docker/start-queue.sh /usr/local/bin/start-queue
 COPY docker/start-scheduler.sh /usr/local/bin/start-scheduler
-COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+COPY docker/php/conf.d/opcache.ini /usr/local/etc/php/conf.d/opcache.ini
+COPY docker/php-fpm/zz-kynex-www.conf /usr/local/etc/php-fpm.d/zz-kynex-www.conf
 
-RUN chmod +x /usr/local/bin/start-container /usr/local/bin/start-queue /usr/local/bin/start-scheduler \
+RUN chmod +x /usr/local/bin/bootstrap-runtime /usr/local/bin/start-app /usr/local/bin/start-queue /usr/local/bin/start-scheduler \
     && mkdir -p bootstrap/cache \
     && mkdir -p storage/framework/cache storage/framework/sessions storage/framework/views storage/logs \
     && chown -R www-data:www-data /var/www/html
 
-EXPOSE 8080
+EXPOSE 9000
 
-CMD ["/usr/local/bin/start-container"]
+CMD ["/usr/local/bin/start-app"]

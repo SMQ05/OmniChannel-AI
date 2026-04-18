@@ -1,0 +1,26 @@
+FROM node:20-alpine AS frontend
+
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+RUN npm ci
+
+COPY resources ./resources
+COPY public ./public
+COPY vite.config.js ./
+RUN npm run build
+
+FROM nginx:1.27-alpine AS runtime
+
+WORKDIR /var/www/html
+
+COPY public ./public
+COPY --from=frontend /app/public/build ./public/build
+COPY docker/nginx/default.conf.template /etc/nginx/templates/default.conf.template
+COPY docker/nginx/start-nginx.sh /usr/local/bin/start-nginx
+
+RUN chmod +x /usr/local/bin/start-nginx
+
+EXPOSE 8080
+
+CMD ["/usr/local/bin/start-nginx"]

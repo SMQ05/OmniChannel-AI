@@ -23,6 +23,8 @@ npm run build
 php artisan serve
 ```
 
+`php artisan serve` is for local development only. Production Docker/Coolify deploys now run PHP-FPM behind Nginx with separate worker and scheduler processes.
+
 ## Tests
 
 ```bash

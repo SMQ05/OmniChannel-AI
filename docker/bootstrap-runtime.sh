@@ -13,16 +13,14 @@ fi
 chown -R www-data:www-data bootstrap/cache storage
 
 if [ "${RUN_PACKAGE_DISCOVER:-true}" = "true" ]; then
-    su -s /bin/sh -c "php artisan package:discover --ansi" www-data
+    su-exec www-data php artisan package:discover --ansi
 fi
 
 if [ "${RUN_MIGRATIONS:-false}" = "true" ]; then
-    su -s /bin/sh -c "php artisan migrate --force" www-data
+    su-exec www-data php artisan migrate --force
 fi
 
 if [ "${CACHE_LARAVEL_BOOTSTRAP:-true}" = "true" ]; then
-    su -s /bin/sh -c "php artisan config:cache" www-data
-    su -s /bin/sh -c "php artisan view:cache" www-data
+    su-exec www-data php artisan config:cache
+    su-exec www-data php artisan view:cache
 fi
-
-exec /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf

@@ -27,12 +27,11 @@ services:
     env: php
     plan: starter
     buildCommand: composer install --no-dev --optimize-autoloader
-    startCommand: php artisan queue:work ${QUEUE_CONNECTION} --queue=webhooks,integrations,reminders --sleep=1 --tries=3 --timeout=120 --max-time=3600
+    startCommand: php artisan queue:work ${QUEUE_CONNECTION} --queue=webhooks,integrations,reminders --sleep=1 --tries=3 --timeout=60 --max-time=3600
 
-  - type: cron
+  - type: worker
     name: kynex-omnichannel-ai-scheduler
     env: php
     plan: starter
-    schedule: "* * * * *"
     buildCommand: composer install --no-dev --optimize-autoloader
-    startCommand: php artisan schedule:run
+    startCommand: php artisan schedule:work

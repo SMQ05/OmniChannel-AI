@@ -1,9 +1,6 @@
 #!/bin/sh
 set -eu
 
-cd /var/www/html
+/usr/local/bin/bootstrap-runtime
 
-while true; do
-    php artisan schedule:run --no-interaction
-    sleep 60
-done
+exec su-exec www-data php artisan schedule:work --no-interaction

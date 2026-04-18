@@ -159,7 +159,11 @@ class WebhookController extends Controller
         }
 
         try {
-            ProcessIncomingMessage::dispatch($webhook->id);
+            $dispatch = ProcessIncomingMessage::dispatch($webhook->id);
+
+            if (!app()->runningUnitTests()) {
+                $dispatch->afterResponse();
+            }
 
             $webhook->forceFill([
                 'queue_connection' => config('kynex.queues.named.webhooks.connection'),

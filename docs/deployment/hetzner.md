@@ -42,7 +42,7 @@ Use Redis or Valkey in Hetzner production.
 
 Worker command:
 
-`php artisan queue:work redis --queue=webhooks,integrations,reminders --sleep=1 --tries=3 --timeout=120 --max-time=3600`
+`php artisan queue:work redis --queue=webhooks,integrations,reminders --sleep=1 --tries=3 --timeout=60 --max-time=3600`
 
 If you enable Horizon:
 
@@ -56,7 +56,7 @@ If you enable Horizon:
 
 ```ini
 [program:kynex-omnichannel-ai-worker]
-command=/usr/bin/php /var/www/kynex-omnichannel-ai/artisan queue:work redis --queue=webhooks,integrations,reminders --sleep=1 --tries=3 --timeout=120 --max-time=3600
+command=/usr/bin/php /var/www/kynex-omnichannel-ai/artisan queue:work redis --queue=webhooks,integrations,reminders --sleep=1 --tries=3 --timeout=60 --max-time=3600
 directory=/var/www/kynex-omnichannel-ai
 autostart=true
 autorestart=true
@@ -81,7 +81,7 @@ User=www-data
 Group=www-data
 Restart=always
 WorkingDirectory=/var/www/kynex-omnichannel-ai
-ExecStart=/usr/bin/php artisan queue:work redis --queue=webhooks,integrations,reminders --sleep=1 --tries=3 --timeout=120 --max-time=3600
+ExecStart=/usr/bin/php artisan queue:work redis --queue=webhooks,integrations,reminders --sleep=1 --tries=3 --timeout=60 --max-time=3600
 
 [Install]
 WantedBy=multi-user.target
@@ -89,9 +89,9 @@ WantedBy=multi-user.target
 
 ## Scheduler
 
-Cron entry:
+Prefer a dedicated systemd service for the scheduler:
 
-`* * * * * cd /var/www/kynex-omnichannel-ai && php artisan schedule:run >> /dev/null 2>&1`
+`php artisan schedule:work`
 
 ## Zero-Downtime-ish Deploy Flow
 

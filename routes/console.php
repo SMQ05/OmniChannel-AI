@@ -10,9 +10,9 @@ use Illuminate\Support\Facades\Schedule;
 |--------------------------------------------------------------------------
 |
 | This file defines all scheduled Artisan commands for the application.
-| The scheduler is run by a single cron entry on the server:
+| The scheduler can be run as a dedicated long-lived worker:
 |
-|   * * * * * cd /path-to-project && php artisan schedule:run >> /dev/null 2>&1
+|   php artisan schedule:work
 |
 */
 

@@ -47,9 +47,9 @@ If you enable Redis on Render, switch queue/cache env vars accordingly and provi
 7. Let the web build run:
    `php artisan migrate --force`
 8. Confirm the worker is running:
-   `php artisan queue:work ${QUEUE_CONNECTION} --queue=webhooks,integrations,reminders --sleep=1 --tries=3 --timeout=120 --max-time=3600`
+   `php artisan queue:work ${QUEUE_CONNECTION} --queue=webhooks,integrations,reminders --sleep=1 --tries=3 --timeout=60 --max-time=3600`
 9. Confirm the cron service runs:
-   `php artisan schedule:run`
+   `php artisan schedule:work`
 10. Open `/settings/diagnostics` and verify:
    queue connectivity, worker heartbeat, scheduler heartbeat, and webhook URLs.
 11. Hit the public health endpoint:
