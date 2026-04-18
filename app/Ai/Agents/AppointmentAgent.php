@@ -36,9 +36,10 @@ use Laravel\Ai\Facades\Ai;
  *    them but never modifies the set.
  *
  * LLM provider mapping:
- *  - 'claude'  → claude-sonnet-4-6   (default)
- *  - 'gpt4o'   → gpt-4o
- *  - 'minimax' → minimax-text-01
+ *  - 'claude'     → claude-sonnet-4-6   (default)
+ *  - 'gpt4o'      → gpt-4o
+ *  - 'openrouter' → openrouter/openai/gpt-4.1-mini
+ *  - 'minimax'    → minimax-text-01
  *
  * @phpstan-type AgentResponse array{
  *     intent:       string,
@@ -397,12 +398,13 @@ class AppointmentAgent
      * Map a tenant LLM provider slug to the concrete model identifier
      * expected by the Laravel AI SDK.
      *
-     * @param  string  $provider  'claude' | 'gpt4o' | 'minimax'
+     * @param  string  $provider  'claude' | 'gpt4o' | 'openrouter' | 'minimax'
      */
     private function resolveModel(string $provider): string
     {
         return match (strtolower($provider)) {
             'gpt4o'   => 'gpt-4o',
+            'openrouter' => 'openrouter/openai/gpt-4.1-mini',
             'minimax' => 'minimax-text-01',
             default   => 'claude-sonnet-4-6',
         };

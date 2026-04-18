@@ -33,10 +33,14 @@
     <div class="rounded-2xl bg-gray-900/60 backdrop-blur border border-gray-800 overflow-hidden">
         <div class="px-5 py-4 border-b border-gray-800 flex items-center justify-between">
             <h2 class="text-sm font-semibold text-white">Queue Depths</h2>
-            <a href="{{ route('admin.horizon') }}"
-               class="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">
-                Open Horizon →
-            </a>
+            @if(config('queue.default') === 'redis')
+                <a href="{{ route('admin.horizon') }}"
+                   class="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">
+                    Open Horizon →
+                </a>
+            @else
+                <span class="text-xs text-gray-500">Database queue mode</span>
+            @endif
         </div>
 
         <div class="p-5 space-y-4">

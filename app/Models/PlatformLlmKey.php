@@ -15,7 +15,7 @@ use Illuminate\Database\Eloquent\Model;
  * is never readable in plain text from the database.
  *
  * @property int    $id
- * @property string $provider    'claude' | 'gpt4o' | 'minimax'
+ * @property string $provider    'claude' | 'gpt4o' | 'openrouter' | 'minimax'
  * @property string $label
  * @property string $key_value   Decrypted at runtime by Eloquent cast
  * @property bool   $is_active
@@ -58,7 +58,7 @@ class PlatformLlmKey extends Model
      * Returns null if no active platform key is configured — in that case the
      * calling code should fall back to requiring a tenant-level key.
      *
-     * @param  string  $provider  'claude' | 'gpt4o' | 'minimax'
+     * @param  string  $provider  'claude' | 'gpt4o' | 'openrouter' | 'minimax'
      * @return static|null
      */
     public static function activeFor(string $provider): ?static

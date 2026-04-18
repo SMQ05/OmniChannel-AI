@@ -15,7 +15,7 @@ use Illuminate\View\View;
  * Manages platform-level LLM API keys for super_admin.
  *
  * Small tenants can rely on these shared keys instead of providing their own.
- * Each provider (claude | gpt4o | minimax) has at most one active key.
+ * Each provider (claude | gpt4o | openrouter | minimax) has at most one active key.
  * Stored encrypted via the PlatformLlmKey model cast.
  */
 class AdminLlmKeyController extends Controller
@@ -44,7 +44,7 @@ class AdminLlmKeyController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $validated = $request->validate([
-            'provider'  => ['required', Rule::in(['claude', 'gpt4o', 'minimax'])],
+            'provider'  => ['required', Rule::in(['claude', 'gpt4o', 'openrouter', 'minimax'])],
             'label'     => ['required', 'string', 'max:255'],
             'key_value' => ['required', 'string', 'min:20', 'max:500'],
         ]);

@@ -71,7 +71,7 @@
                             <label class="block text-xs text-gray-500 mb-1">LLM Provider</label>
                             <select name="llm_provider" x-model="aiConfig.llm_provider"
                                     class="w-full bg-gray-800 border border-gray-700 text-gray-300 text-sm rounded-lg px-3 py-2">
-                                @foreach(['claude' => 'Claude', 'gpt4o' => 'GPT-4o', 'minimax' => 'MiniMax'] as $val => $label)
+                                @foreach(['claude' => 'Claude', 'gpt4o' => 'GPT-4o', 'openrouter' => 'OpenRouter', 'minimax' => 'MiniMax'] as $val => $label)
                                     <option value="{{ $val }}" {{ old('llm_provider', $aiConfig['llm_provider'] ?? 'claude') === $val ? 'selected' : '' }}>{{ $label }}</option>
                                 @endforeach
                             </select>

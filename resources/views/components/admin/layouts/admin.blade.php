@@ -32,8 +32,11 @@
                     ['route' => 'admin.dashboard',        'label' => 'Overview'],
                     ['route' => 'admin.businesses.index', 'label' => 'All Businesses'],
                     ['route' => 'admin.llm-keys.index',   'label' => 'LLM API Keys'],
-                    ['route' => 'admin.horizon',          'label' => 'Horizon (Queues)'],
                 ];
+
+                if (config('queue.default') === 'redis') {
+                    $navItems[] = ['route' => 'admin.horizon', 'label' => 'Horizon (Queues)'];
+                }
             @endphp
 
             @foreach($navItems as $item)

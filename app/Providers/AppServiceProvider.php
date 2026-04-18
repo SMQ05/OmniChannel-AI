@@ -14,6 +14,7 @@ use App\Voice\Null\NullSpeechToText;
 use App\Voice\Null\NullTelephonyTransport;
 use App\Voice\Null\NullTextToSpeech;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Support\ServiceProvider;
 
 /**
@@ -53,6 +54,10 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        if (config('app.env') === 'production') {
+            URL::forceScheme('https');
+        }
+
         $this->registerMiddlewareAliases();
     }
 

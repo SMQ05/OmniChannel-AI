@@ -24,7 +24,7 @@
                             class="w-full bg-gray-800 border border-gray-700 text-gray-300 text-sm rounded-lg px-3 py-2
                                    focus:ring-indigo-500 focus:border-indigo-500">
                         <option value="">Select…</option>
-                        @foreach(['claude' => 'Claude (Anthropic)', 'gpt4o' => 'GPT-4o (OpenAI)', 'minimax' => 'MiniMax'] as $val => $label)
+                        @foreach(['claude' => 'Claude (Anthropic)', 'gpt4o' => 'GPT-4o (OpenAI)', 'openrouter' => 'OpenRouter', 'minimax' => 'MiniMax'] as $val => $label)
                             <option value="{{ $val }}">{{ $label }}</option>
                         @endforeach
                     </select>
@@ -86,6 +86,7 @@
                                 {{ match($key->provider) {
                                     'claude'  => 'bg-orange-500/20 text-orange-400',
                                     'gpt4o'   => 'bg-emerald-500/20 text-emerald-400',
+                                    'openrouter' => 'bg-violet-500/20 text-violet-400',
                                     'minimax' => 'bg-blue-500/20 text-blue-400',
                                     default   => 'bg-gray-700 text-gray-400',
                                 } }}">

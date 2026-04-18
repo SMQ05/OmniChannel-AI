@@ -48,7 +48,7 @@ class AiSettingsController extends Controller
             'persona'      => ['required', 'string', 'max:5000'],
             'tone'         => ['required', 'in:formal,friendly,casual'],
             'language'     => ['required', 'string', 'max:50'],
-            'llm_provider' => ['required', 'in:claude,gpt4o,minimax'],
+            'llm_provider' => ['required', 'in:claude,gpt4o,openrouter,minimax'],
             'services'     => ['nullable', 'array'],
             'services.*.name'         => ['required', 'string', 'max:255'],
             'services.*.duration_min' => ['required', 'integer', 'min:5'],

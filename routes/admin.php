@@ -48,6 +48,10 @@ Route::prefix('admin')
             Route::delete('/{llmKey}',    [AdminLlmKeyController::class, 'destroy']) ->name('destroy');
         });
 
-        // Horizon — link only (redirect)
-        Route::redirect('/horizon', '/horizon')->name('horizon');
+        // Horizon — exposed only for Redis/Horizon deployments
+        Route::get('/horizon', function () {
+            abort_unless(config('queue.default') === 'redis', 404);
+
+            return redirect('/horizon');
+        })->name('horizon');
     });
