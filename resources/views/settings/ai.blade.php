@@ -4,15 +4,32 @@
 
     <form method="POST" action="{{ route('settings.ai.update') }}"
           x-data="{
-              aiConfig: @js($aiConfig),
               previewText: '',
+              previewError: '',
               async fetchPreview() {
-                  const res = await fetch('{{ route('settings.ai.preview') }}?ai_config=' + encodeURIComponent(JSON.stringify(this.aiConfig)), {
-                      headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                  const formData = new FormData(this.$refs.form);
+                  const response = await fetch('{{ route('settings.ai.preview') }}', {
+                      method: 'POST',
+                      headers: {
+                          'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content,
+                          'X-Requested-With': 'XMLHttpRequest',
+                      },
+                      body: formData,
                   });
-                  this.previewText = await res.text();
+
+                  const text = await response.text();
+                  if (!response.ok) {
+                      this.previewError = text || 'Preview unavailable right now.';
+                      this.previewText = '';
+                      return;
+                  }
+
+                  this.previewError = '';
+                  this.previewText = text;
               }
           }"
+          x-ref="form"
+          @input.debounce.250ms="fetchPreview()"
           @change="fetchPreview()"
           x-init="fetchPreview()">
         @csrf
@@ -32,7 +49,6 @@
                         <label class="block text-xs text-gray-500 mb-1">AI Name *</label>
                         <input type="text" name="ai_name"
                                value="{{ old('ai_name', $aiConfig['ai_name'] ?? '') }}"
-                               x-model="aiConfig.ai_name"
                                required
                                placeholder="e.g. Sara, Alex, Zara"
                                class="w-full bg-gray-800 border border-gray-700 text-gray-100 text-sm rounded-lg px-3 py-2
@@ -42,7 +58,6 @@
                     <div>
                         <label class="block text-xs text-gray-500 mb-1">Persona Instructions *</label>
                         <textarea name="persona" rows="5" required
-                                  x-model="aiConfig.persona"
                                   placeholder="e.g. You are warm, patient, and professional. Greet returning patients by name…"
                                   class="w-full bg-gray-800 border border-gray-700 text-gray-100 text-sm rounded-lg px-3 py-2
                                          focus:ring-indigo-500 focus:border-indigo-500">{{ old('persona', $aiConfig['persona'] ?? '') }}</textarea>
@@ -51,7 +66,7 @@
                     <div class="grid grid-cols-3 gap-3">
                         <div>
                             <label class="block text-xs text-gray-500 mb-1">Tone</label>
-                            <select name="tone" x-model="aiConfig.tone"
+                            <select name="tone"
                                     class="w-full bg-gray-800 border border-gray-700 text-gray-300 text-sm rounded-lg px-3 py-2">
                                 @foreach(['formal' => 'Formal', 'friendly' => 'Friendly', 'casual' => 'Casual'] as $val => $label)
                                     <option value="{{ $val }}" {{ old('tone', $aiConfig['tone'] ?? 'friendly') === $val ? 'selected' : '' }}>{{ $label }}</option>
@@ -60,7 +75,7 @@
                         </div>
                         <div>
                             <label class="block text-xs text-gray-500 mb-1">Language</label>
-                            <select name="language" x-model="aiConfig.language"
+                            <select name="language"
                                     class="w-full bg-gray-800 border border-gray-700 text-gray-300 text-sm rounded-lg px-3 py-2">
                                 @foreach(['English','Urdu','Arabic','French','Spanish','Hindi','Other'] as $lang)
                                     <option value="{{ $lang }}" {{ old('language', $aiConfig['language'] ?? 'English') === $lang ? 'selected' : '' }}>{{ $lang }}</option>
@@ -69,7 +84,7 @@
                         </div>
                         <div>
                             <label class="block text-xs text-gray-500 mb-1">LLM Provider</label>
-                            <select name="llm_provider" x-model="aiConfig.llm_provider"
+                            <select name="llm_provider"
                                     class="w-full bg-gray-800 border border-gray-700 text-gray-300 text-sm rounded-lg px-3 py-2">
                                 @foreach(['claude' => 'Claude', 'gpt4o' => 'GPT-4o', 'openrouter' => 'OpenRouter', 'minimax' => 'MiniMax'] as $val => $label)
                                     <option value="{{ $val }}" {{ old('llm_provider', $aiConfig['llm_provider'] ?? 'claude') === $val ? 'selected' : '' }}>{{ $label }}</option>
@@ -89,7 +104,15 @@
                     <div class="flex items-center justify-between mb-3">
                         <h2 class="text-sm font-semibold text-white">Services</h2>
                         <button type="button" @click="add()"
-                                class="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">+ Add service</button>
+                                class="text-xs text-indigo-400 hover:text-indigo-300">+ Add service</button>
+                    </div>
+
+                    <p class="mb-3 text-xs text-gray-500">Duration is in minutes. Price is your customer-facing amount for that service.</p>
+                    <div class="mb-2 grid grid-cols-12 gap-2 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                        <div class="col-span-5">Service Name</div>
+                        <div class="col-span-3">Duration (Min)</div>
+                        <div class="col-span-3">Price</div>
+                        <div class="col-span-1 text-right">Remove</div>
                     </div>
 
                     <div class="space-y-2">
@@ -127,7 +150,7 @@
                     <div class="flex items-center justify-between mb-3">
                         <h2 class="text-sm font-semibold text-white">FAQs</h2>
                         <button type="button" @click="add()"
-                                class="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">+ Add FAQ</button>
+                                class="text-xs text-indigo-400 hover:text-indigo-300">+ Add FAQ</button>
                     </div>
 
                     <div class="space-y-3">
@@ -167,10 +190,11 @@
             <div class="rounded-2xl bg-gray-900/60 backdrop-blur border border-gray-800 overflow-hidden sticky top-6 self-start">
                 <div class="px-5 py-4 border-b border-gray-800">
                     <h2 class="text-sm font-semibold text-white">Live System Prompt Preview</h2>
-                    <p class="text-xs text-gray-600 mt-0.5">This is exactly what your AI receives as training on every conversation.</p>
+                    <p class="text-xs text-gray-600 mt-0.5">This shows the current compiled booking prompt. It updates from the form values without saving.</p>
                 </div>
+                <div x-show="previewError" class="mx-5 mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300" x-text="previewError"></div>
                 <pre class="p-5 text-xs text-gray-400 font-mono whitespace-pre-wrap overflow-auto max-h-[70vh] leading-relaxed"
-                     x-text="previewText || 'Fill in the fields on the left to generate your AI\'s system prompt…'"></pre>
+                     x-text="previewText || 'Fill in the fields on the left to generate your AI system prompt preview.'"></pre>
             </div>
 
         </div>

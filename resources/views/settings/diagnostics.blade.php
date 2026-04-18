@@ -202,7 +202,7 @@
                             </span>
                         </div>
                         <div class="mt-2 h-2 overflow-hidden rounded-full bg-gray-800">
-                            <div class="h-full rounded-full {{ $metric['warning'] ? 'bg-amber-400' : 'bg-indigo-500' }}" style="width: {{ $metric['ratio'] !== null ? max(min($metric['ratio'] * 100, 100), 4) : 8 }}%"></div>
+                            <div class="h-full rounded-full {{ $metric['warning'] ? 'bg-amber-400' : 'bg-indigo-500' }}" style="width: {{ $metric['ratio'] !== null ? max(min($metric['ratio'] * 100, 100), 0) : 0 }}%"></div>
                         </div>
                     </div>
                 @endforeach

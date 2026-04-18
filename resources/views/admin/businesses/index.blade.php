@@ -31,7 +31,8 @@
 </form>
 
 {{-- Businesses table --}}
-<div class="rounded-2xl bg-gray-900/60 backdrop-blur border border-gray-800 overflow-hidden">
+<div class="rounded-2xl bg-gray-900/60 backdrop-blur border border-gray-800 overflow-visible">
+    <div class="overflow-x-auto overflow-y-visible">
     <table class="w-full text-sm">
         <thead>
             <tr class="border-b border-gray-800">
@@ -60,7 +61,7 @@
                             $planCode = $activePlan?->code ?? $business->plan;
                             $planLabel = $activePlan?->name ?? ucfirst($business->plan);
                         @endphp
-                        <div x-data="{ open: false }" class="relative">
+                        <div x-data="{ open: false }" class="relative z-20">
                             <button @click="open = !open"
                                     class="px-2.5 py-1 rounded-full text-xs font-medium border transition-colors
                                            {{ match($planCode) {
@@ -73,7 +74,7 @@
                             </button>
 
                             <div x-show="open" @click.outside="open = false"
-                                 class="absolute z-10 top-full mt-1 left-0 bg-gray-800 border border-gray-700 rounded-lg shadow-xl overflow-hidden min-w-28"
+                                 class="absolute z-30 top-full mt-1 left-0 bg-gray-800 border border-gray-700 rounded-lg shadow-xl overflow-hidden min-w-40"
                                  style="display:none">
                                 @foreach($plans as $plan)
                                     <form method="POST" action="{{ route('admin.businesses.update-plan', $business) }}">
@@ -210,6 +211,33 @@
                                 </button>
                             </div>
                         </form>
+
+                        <form method="POST" action="{{ route('admin.businesses.update-owner-password', $business) }}" class="mt-4 grid gap-4 rounded-2xl border border-gray-800 bg-gray-900/60 p-5">
+                            @csrf
+                            @method('PATCH')
+
+                            <div>
+                                <div class="text-sm font-semibold text-white">Reset Business Login Password</div>
+                                <div class="text-xs text-gray-500">Updates the primary business owner password. Use this if the clinic cannot change its login password from the profile page.</div>
+                            </div>
+
+                            <div class="grid gap-4 md:grid-cols-2">
+                                <div>
+                                    <label class="mb-1 block text-xs text-gray-500">New Password</label>
+                                    <input type="password" name="password" class="w-full rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-sm text-white">
+                                </div>
+                                <div>
+                                    <label class="mb-1 block text-xs text-gray-500">Confirm Password</label>
+                                    <input type="password" name="password_confirmation" class="w-full rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-sm text-white">
+                                </div>
+                            </div>
+
+                            <div class="flex justify-end">
+                                <button type="submit" class="rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-500 transition-colors">
+                                    Reset Owner Password
+                                </button>
+                            </div>
+                        </form>
                     </td>
                 </tr>
             </tbody>
@@ -221,6 +249,7 @@
             </tbody>
         @endforelse
     </table>
+    </div>
 
     @if($businesses->hasPages())
         <div class="px-5 py-4 border-t border-gray-800">

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Settings;
 
 use App\Exceptions\VoiceProviderException;
+use App\Ai\Agents\AppointmentAgent;
 use App\Http\Controllers\Controller;
 use App\Models\VoiceChannel;
 use App\Services\Usage\UsageMeteringService;
@@ -97,6 +98,7 @@ class VoiceSettingsController extends Controller
         string $component,
         VoiceProviderResolver $voiceProviderResolver,
         UsageMeteringService $usageMeteringService,
+        AppointmentAgent $appointmentAgent,
     ): RedirectResponse {
         $business = $request->user()->business;
         abort_unless(in_array($component, ['transport', 'stt', 'llm', 'tts'], true), 404);
@@ -105,7 +107,7 @@ class VoiceSettingsController extends Controller
             $result = match ($component) {
                 'transport' => $this->testTransport($request, $business, $voiceProviderResolver, $usageMeteringService),
                 'stt' => $this->testSpeechToText($request, $business, $voiceProviderResolver, $usageMeteringService),
-                'llm' => $this->testLlm($request, $business, $voiceProviderResolver, $usageMeteringService),
+                'llm' => $this->testLlm($request, $business, $usageMeteringService, $appointmentAgent),
                 'tts' => $this->testTextToSpeech($request, $business, $voiceProviderResolver, $usageMeteringService),
             };
         } catch (VoiceProviderException $exception) {
@@ -169,19 +171,22 @@ class VoiceSettingsController extends Controller
     private function testLlm(
         Request $request,
         \App\Models\Business $business,
-        VoiceProviderResolver $resolver,
         UsageMeteringService $usageMeteringService,
+        AppointmentAgent $appointmentAgent,
     ): string {
         $validated = $request->validate([
             'prompt' => ['required', 'string', 'max:1000'],
         ]);
 
-        $chunks = iterator_to_array($resolver->llm($business)->stream([
-            ['role' => 'system', 'content' => 'You are the voice receptionist for a booking SaaS. Keep replies brief.'],
+        $response = $appointmentAgent->respond(
+            business: $business,
+            messages: [
             ['role' => 'user', 'content' => $validated['prompt']],
-        ]));
-
-        $reply = trim(implode(' ', array_filter($chunks, static fn (string $chunk): bool => trim($chunk) !== '')));
+            ],
+            availableSlots: [],
+            providerOverride: $business->channel_config['voice']['llm_provider'] ?? config('voice.default_llm'),
+        );
+        $reply = $response['reply_text'];
 
         $usageMeteringService->record(
             business: $business,

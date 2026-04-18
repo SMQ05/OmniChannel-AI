@@ -79,7 +79,7 @@ class AiSettingsController extends Controller
     public function preview(Request $request): \Illuminate\Http\Response
     {
         $business  = $request->user()->business;
-        $aiConfig  = $request->input('ai_config', $business->ai_config ?? []);
+        $aiConfig  = $this->normalisePreviewConfig($request, $business->ai_config ?? []);
 
         $prompt = $this->compilePrompt($business, $aiConfig);
 
@@ -125,5 +125,32 @@ class AiSettingsController extends Controller
             "LANGUAGE: Always respond in {$language}.",
             "TONE: {$tone}.",
         ]));
+    }
+
+    /**
+     * @param  array<string, mixed>  $fallback
+     * @return array<string, mixed>
+     */
+    private function normalisePreviewConfig(Request $request, array $fallback): array
+    {
+        $payload = $request->input('ai_config');
+
+        if (is_string($payload) && $payload !== '') {
+            /** @var mixed $decoded */
+            $decoded = json_decode($payload, true);
+
+            if (is_array($decoded)) {
+                return $decoded;
+            }
+        }
+
+        if (is_array($payload)) {
+            return $payload;
+        }
+
+        $data = $request->all();
+        unset($data['_token']);
+
+        return array_merge($fallback, array_filter($data, static fn (mixed $value): bool => $value !== null));
     }
 }

@@ -9,7 +9,7 @@
 
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
-<body class="h-full bg-gray-950 text-gray-100 antialiased" x-data>
+<body class="kynex-no-motion h-full bg-gray-950 text-gray-100 antialiased" x-data>
 
 {{-- =====================================================================
      IMPERSONATION BANNER — visible when super_admin is impersonating
@@ -75,6 +75,7 @@
                 <p class="px-3 mb-2 text-xs font-semibold text-gray-600 uppercase tracking-wider">Settings</p>
                 @php
                     $settingsItems = [
+                        ['route' => 'profile.edit',         'label' => 'Profile & Security'],
                         ['route' => 'settings.ai',           'label' => 'AI Training'],
                         ['route' => 'settings.channels',     'label' => 'Channels'],
                         ['route' => 'settings.integrations', 'label' => 'Integrations'],
@@ -131,8 +132,7 @@
 
         {{-- Flash messages --}}
         @if(session('success'))
-            <div x-data="{ show: true }" x-show="show" x-init="setTimeout(() => show = false, 4000)"
-                 class="mx-6 mt-4 px-4 py-3 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-lg text-sm">
+            <div class="mx-6 mt-4 px-4 py-3 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-lg text-sm">
                 {{ session('success') }}
             </div>
         @endif

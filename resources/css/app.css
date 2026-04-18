@@ -1,1 +1,11 @@
 @import 'tailwindcss';
+
+@layer base {
+    .kynex-no-motion *,
+    .kynex-no-motion *::before,
+    .kynex-no-motion *::after {
+        animation: none !important;
+        transition: none !important;
+        scroll-behavior: auto !important;
+    }
+}

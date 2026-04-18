@@ -75,6 +75,7 @@ Route::middleware(['auth', 'require_business'])->group(function (): void {
         Route::get('/ai', [AiSettingsController::class, 'edit'])->name('ai');
         Route::post('/ai', [AiSettingsController::class, 'update'])->name('ai.update');
         Route::get('/ai/preview', [AiSettingsController::class, 'preview'])->name('ai.preview');
+        Route::post('/ai/preview', [AiSettingsController::class, 'preview']);
 
         Route::get('/channels', [ChannelSettingsController::class, 'edit'])->name('channels');
         Route::post('/channels', [ChannelSettingsController::class, 'update'])->name('channels.update');

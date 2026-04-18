@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Ai\Agents\AppointmentAgent;
 use App\Models\Business;
 use App\Models\BusinessSubscription;
 use App\Models\Plan;
@@ -33,9 +34,6 @@ class VoiceProviderTest extends TestCase
             'https://api.telnyx.com/*' => Http::response(['data' => ['call_control_id' => 'call-1']], 200),
             'https://api.deepgram.com/*' => Http::response([
                 'results' => ['channels' => [['alternatives' => [['transcript' => 'hello from deepgram']]]]],
-            ], 200),
-            'https://openrouter.ai/*' => Http::response([
-                'choices' => [['message' => ['content' => 'Hello from OpenRouter']]],
             ], 200),
             'https://api.elevenlabs.io/*' => Http::response('fake-mp3', 200),
         ]);
@@ -91,6 +89,21 @@ class VoiceProviderTest extends TestCase
             'password' => bcrypt('password'),
             'role' => 'business_owner',
         ]);
+
+        $this->app->instance(AppointmentAgent::class, new class extends AppointmentAgent {
+            public function respond(\App\Models\Business $business, array $messages, array $availableSlots = [], ?string $providerOverride = null): array
+            {
+                return [
+                    'intent' => 'faq',
+                    'provider_id' => null,
+                    'date' => null,
+                    'time' => null,
+                    'service_type' => null,
+                    'reply_text' => 'Shared booking brain response.',
+                    'needs_human' => false,
+                ];
+            }
+        });
 
         $this->actingAs($user)
             ->post(route('settings.voice.test', 'transport'), [

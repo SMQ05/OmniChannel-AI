@@ -83,10 +83,29 @@ class AppointmentAgent
         array $availableSlots,
         string $inboundText,
     ): array {
+        return $this->respond(
+            business: $business,
+            messages: $conversationLog->toAiMessages(),
+            availableSlots: $availableSlots,
+            providerOverride: null,
+        );
+    }
+
+    /**
+     * @param  list<array{role: string, content: string}>  $messages
+     * @param  list<SlotArray>  $availableSlots
+     * @return AgentResponse
+     */
+    public function respond(
+        Business $business,
+        array $messages,
+        array $availableSlots = [],
+        ?string $providerOverride = null,
+    ): array {
         try {
             $systemPrompt = $this->buildSystemPrompt($business, $availableSlots);
-            $messages     = $conversationLog->toAiMessages();
-            $model        = $this->resolveModel($business->llmProvider());
+            $provider = $providerOverride ?: $business->llmProvider();
+            $model = $this->resolveModel($provider);
 
             $rawResponse = Ai::chat()
                 ->model($model)
@@ -107,7 +126,7 @@ class AppointmentAgent
         } catch (\Throwable $e) {
             Log::error('AppointmentAgent: AI call failed.', [
                 'business_id' => $business->id,
-                'model'       => $this->resolveModel($business->llmProvider()),
+                'model'       => $this->resolveModel($providerOverride ?: $business->llmProvider()),
                 'error'       => $e->getMessage(),
             ]);
 

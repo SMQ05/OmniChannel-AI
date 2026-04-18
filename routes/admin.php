@@ -35,6 +35,7 @@ Route::prefix('admin')
             Route::patch('/{business}/toggle',            [AdminBusinessController::class, 'toggle'])     ->name('toggle');
             Route::patch('/{business}/plan',              [AdminBusinessController::class, 'updatePlan']) ->name('update-plan');
             Route::patch('/{business}/subscription',      [AdminBusinessController::class, 'updateSubscription'])->name('update-subscription');
+            Route::patch('/{business}/owner-password',    [AdminBusinessController::class, 'updateOwnerPassword'])->name('update-owner-password');
             Route::post('/{business}/impersonate',        [AdminImpersonateController::class, 'start'])   ->name('impersonate');
         });
 
@@ -59,6 +60,10 @@ Route::prefix('admin')
 
         Route::prefix('voice')->name('voice.')->group(function (): void {
             Route::get('/', [AdminVoiceController::class, 'index'])->name('index');
+            Route::patch('/{business}', [AdminVoiceController::class, 'updateBusiness'])->name('update');
+            Route::post('/{business}/channels', [AdminVoiceController::class, 'storeChannel'])->name('channels.store');
+            Route::patch('/{business}/channels/{voiceChannel}/toggle', [AdminVoiceController::class, 'toggleChannel'])->name('channels.toggle');
+            Route::post('/{business}/test/{component}', [AdminVoiceController::class, 'testProvider'])->name('test');
         });
 
         // Horizon — exposed only for Redis/Horizon deployments

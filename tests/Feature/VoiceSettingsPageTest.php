@@ -98,8 +98,10 @@ class VoiceSettingsPageTest extends TestCase
 
         $response->assertOk();
         $response->assertSee('Voice Agent');
+        $response->assertSee('Business Voice Settings');
         $response->assertSee('Configured Voice Channels');
         $response->assertSee('Main line');
+        $response->assertDontSee('Provider Test Actions');
     }
 
     public function test_business_user_can_toggle_existing_voice_channel(): void

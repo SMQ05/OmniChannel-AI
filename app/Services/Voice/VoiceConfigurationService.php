@@ -160,16 +160,41 @@ class VoiceConfigurationService
     private function providerConfigured(string $kind, string $provider): bool
     {
         return match ("{$kind}:{$provider}") {
-            'transport:telnyx' => filled(config('voice.providers.transport.telnyx.api_key'))
-                && filled(config('voice.providers.transport.telnyx.connection_id')),
-            'transport:sip' => filled(config('voice.providers.transport.sip.server'))
-                && filled(config('voice.providers.transport.sip.username'))
-                && filled(config('voice.providers.transport.sip.password')),
-            'stt:deepgram' => filled(config('voice.providers.stt.deepgram.api_key')),
-            'llm:openrouter' => filled(config('voice.providers.llm.openrouter.api_key')),
-            'tts:elevenlabs' => filled(config('voice.providers.tts.elevenlabs.api_key'))
-                && filled(config('voice.providers.tts.elevenlabs.voice_id')),
+            'transport:telnyx' => $this->isConfiguredValue(config('voice.providers.transport.telnyx.api_key'))
+                && $this->isConfiguredValue(config('voice.providers.transport.telnyx.connection_id')),
+            'transport:sip' => $this->isConfiguredValue(config('voice.providers.transport.sip.server'))
+                && $this->isConfiguredValue(config('voice.providers.transport.sip.username'))
+                && $this->isConfiguredValue(config('voice.providers.transport.sip.password')),
+            'stt:deepgram' => $this->isConfiguredValue(config('voice.providers.stt.deepgram.api_key')),
+            'llm:openrouter' => $this->isConfiguredValue(config('voice.providers.llm.openrouter.api_key')),
+            'tts:elevenlabs' => $this->isConfiguredValue(config('voice.providers.tts.elevenlabs.api_key'))
+                && $this->isConfiguredValue(config('voice.providers.tts.elevenlabs.voice_id')),
             default => false,
         };
+    }
+
+    private function isConfiguredValue(mixed $value): bool
+    {
+        if (!is_string($value)) {
+            return false;
+        }
+
+        $normalized = trim($value);
+
+        if ($normalized === '' || strtolower($normalized) === 'null') {
+            return false;
+        }
+
+        if (preg_match('/^\.+$/', $normalized) === 1) {
+            return false;
+        }
+
+        foreach (['REPLACE', 'YOUR_', 'CHANGE_ME', 'example', '<'] as $placeholder) {
+            if (str_contains(strtoupper($normalized), strtoupper($placeholder))) {
+                return false;
+            }
+        }
+
+        return true;
     }
 }

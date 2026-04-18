@@ -10,6 +10,7 @@ use App\Models\Plan;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
@@ -151,6 +152,30 @@ class AdminBusinessController extends Controller
 
         return redirect()->route('admin.businesses.index')
             ->with('success', "Subscription controls updated for {$business->name}.");
+    }
+
+    public function updateOwnerPassword(Request $request, Business $business): RedirectResponse
+    {
+        $validated = $request->validate([
+            'password' => ['required', 'string', 'confirmed', 'min:8'],
+        ]);
+
+        $owner = $business->users()
+            ->where('role', 'business_owner')
+            ->orderBy('id')
+            ->first() ?? $business->users()->orderBy('id')->first();
+
+        if ($owner === null) {
+            return redirect()->route('admin.businesses.index')
+                ->withErrors(['owner_password' => "No user account exists for {$business->name}."]);
+        }
+
+        $owner->update([
+            'password' => Hash::make($validated['password']),
+        ]);
+
+        return redirect()->route('admin.businesses.index')
+            ->with('success', "Login password updated for {$owner->email}.");
     }
 
     /**

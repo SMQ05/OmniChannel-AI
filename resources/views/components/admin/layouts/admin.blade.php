@@ -9,7 +9,7 @@
 
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
-<body class="h-full bg-gray-950 text-gray-100 antialiased" x-data>
+<body class="kynex-no-motion h-full bg-gray-950 text-gray-100 antialiased" x-data>
 
 <div class="flex h-full">
 
@@ -92,8 +92,7 @@
 
         {{-- Flash messages --}}
         @if(session('success'))
-            <div x-data="{ show: true }" x-show="show" x-init="setTimeout(() => show = false, 5000)"
-                 class="mx-6 mt-4 px-4 py-3 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-lg text-sm">
+            <div class="mx-6 mt-4 px-4 py-3 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-lg text-sm">
                 {{ session('success') }}
             </div>
         @endif

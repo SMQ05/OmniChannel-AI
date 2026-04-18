@@ -9,6 +9,7 @@ use App\Models\BusinessSubscription;
 use App\Models\Plan;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
 
 class AdminBusinessControlsTest extends TestCase
@@ -84,5 +85,47 @@ class AdminBusinessControlsTest extends TestCase
         $this->assertSame(250, $subscription->included_quotas['messages_sent']);
         $this->assertTrue($subscription->feature_flags['voice_agent']);
         $this->assertSame(12, $subscription->overage_counters['messages_sent']);
+    }
+
+    public function test_super_admin_can_reset_business_owner_password(): void
+    {
+        $business = Business::query()->create([
+            'name' => 'Clinic',
+            'business_type' => 'clinic',
+            'slug' => 'clinic',
+            'timezone' => 'UTC',
+            'locale' => 'en',
+            'channel_config' => [],
+            'integration_config' => [],
+            'reminder_settings' => [],
+            'ai_config' => [],
+            'is_active' => true,
+            'plan' => 'trial',
+        ]);
+
+        $owner = User::query()->create([
+            'business_id' => $business->id,
+            'name' => 'Owner',
+            'email' => 'owner@example.com',
+            'password' => bcrypt('old-password'),
+            'role' => 'business_owner',
+        ]);
+
+        $admin = User::query()->create([
+            'business_id' => null,
+            'name' => 'Admin',
+            'email' => 'admin@example.com',
+            'password' => bcrypt('password'),
+            'role' => 'super_admin',
+        ]);
+
+        $this->actingAs($admin)
+            ->patch(route('admin.businesses.update-owner-password', $business), [
+                'password' => 'new-secure-password',
+                'password_confirmation' => 'new-secure-password',
+            ])
+            ->assertRedirect(route('admin.businesses.index'));
+
+        $this->assertTrue(Hash::check('new-secure-password', $owner->fresh()->password));
     }
 }

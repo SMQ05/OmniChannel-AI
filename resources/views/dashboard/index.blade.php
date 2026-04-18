@@ -52,6 +52,13 @@
     </div>
 </div>
 
+@php
+    $dashboardUsageMetrics = collect($usageSummary['metrics'])
+        ->keyBy('metric')
+        ->only(['messages_received', 'messages_sent', 'reminders_sent'])
+        ->values();
+@endphp
+
 <div class="mb-6 grid grid-cols-1 xl:grid-cols-2 gap-6">
     <div class="rounded-2xl bg-gray-900/60 backdrop-blur border border-gray-800 p-5">
         <div class="flex items-center justify-between gap-4">
@@ -63,19 +70,19 @@
         </div>
 
         <div class="mt-4 space-y-4">
-            @foreach(collect($usageSummary['metrics'])->take(3) as $metric)
+            @foreach($dashboardUsageMetrics as $metric)
                 <div>
                     <div class="flex items-center justify-between gap-3 text-xs">
                         <span class="text-gray-300">{{ $metric['label'] }}</span>
                         <span class="{{ $metric['warning'] ? 'text-amber-300' : 'text-gray-500' }}">
-                            {{ number_format($metric['used'], $metric['metric'] === 'llm_tokens_estimated' ? 0 : 1) }}
+                            {{ floor($metric['used']) == $metric['used'] ? number_format($metric['used'], 0) : number_format($metric['used'], 1) }}
                             @if($metric['limit'] !== null)
-                                / {{ number_format($metric['limit'], $metric['metric'] === 'llm_tokens_estimated' ? 0 : 1) }}
+                                / {{ floor($metric['limit']) == $metric['limit'] ? number_format($metric['limit'], 0) : number_format($metric['limit'], 1) }}
                             @endif
                         </span>
                     </div>
                     <div class="mt-2 h-2 overflow-hidden rounded-full bg-gray-800">
-                        <div class="h-full rounded-full {{ $metric['warning'] ? 'bg-amber-400' : 'bg-indigo-500' }}" style="width: {{ $metric['ratio'] !== null ? max(min($metric['ratio'] * 100, 100), 4) : 10 }}%"></div>
+                        <div class="h-full rounded-full {{ $metric['warning'] ? 'bg-amber-400' : 'bg-indigo-500' }}" style="width: {{ $metric['ratio'] !== null ? max(min($metric['ratio'] * 100, 100), 0) : 0 }}%"></div>
                     </div>
                 </div>
             @endforeach
@@ -171,7 +178,7 @@
     <div class="rounded-2xl bg-gray-900/60 backdrop-blur border border-gray-800 overflow-hidden">
         <div class="px-5 py-4 border-b border-gray-800 flex items-center gap-2">
             @if($pendingHandoffs->count() > 0)
-                <span class="w-2 h-2 bg-red-400 rounded-full animate-ping"></span>
+                <span class="w-2 h-2 bg-red-400 rounded-full"></span>
             @endif
             <h2 class="text-sm font-semibold text-white">Human Handoffs</h2>
         </div>

@@ -1,7 +1,6 @@
 <x-layouts.app title="Voice Agent">
 @php
     $settings = $voiceState['settings'];
-    $platform = $voiceState['platform'];
     $voiceChannels = $voiceState['channels'];
     $recentCalls = $voiceState['recent_calls'];
 @endphp
@@ -55,7 +54,7 @@
             <div class="flex items-center justify-between gap-4">
                 <div>
                     <h3 class="text-sm font-semibold text-white">Business Voice Settings</h3>
-                    <p class="mt-1 text-xs text-gray-500">Feature flag, provider routing, and operator-facing call copy.</p>
+                    <p class="mt-1 text-xs text-gray-500">Business-specific routing, greeting copy, and handoff behavior for your clinic.</p>
                 </div>
                 <label class="inline-flex items-center gap-2 text-sm text-gray-300">
                     <input type="checkbox" name="voice[enabled]" value="1" @checked(old('voice.enabled', $settings['enabled'] ?? false)) class="rounded border-gray-700 bg-gray-950 text-indigo-500">
@@ -73,8 +72,8 @@
                                 <option value="{{ $provider }}" @selected(old("voice.$kind"."_provider", $settings[$kind . '_provider'] ?? null) === $provider)>{{ $providerLabel }}</option>
                             @endforeach
                         </select>
-                        <div class="mt-1 text-xs {{ data_get($platform, "providers.$kind." . (old("voice.$kind"."_provider", $settings[$kind . '_provider'] ?? null)) . ".ready") ? 'text-emerald-400' : 'text-gray-500' }}">
-                            Platform default: {{ ucfirst($platform['defaults'][$kind] ?? 'not set') }}
+                        <div class="mt-1 text-xs text-gray-500">
+                            Platform default: {{ ucfirst($voiceState['platform']['defaults'][$kind] ?? 'not set') }}
                         </div>
                     </div>
                 @endforeach
@@ -99,21 +98,22 @@
         </form>
 
         <div class="rounded-2xl border border-gray-800 bg-gray-900/60 p-6">
-            <h3 class="text-sm font-semibold text-white">Platform Provider Readiness</h3>
-            <div class="mt-4 grid gap-3">
-                @foreach($platform['providers'] as $kind => $providers)
-                    <div class="rounded-xl border border-gray-800 px-4 py-3">
-                        <div class="text-xs uppercase tracking-wide text-gray-500">{{ strtoupper($kind) }}</div>
-                        <div class="mt-2 space-y-2">
-                            @foreach($providers as $provider)
-                                <div class="flex items-center justify-between text-sm">
-                                    <span class="text-white">{{ $provider['label'] }}</span>
-                                    <span class="{{ $provider['ready'] ? 'text-emerald-400' : 'text-amber-400' }}">{{ $provider['ready'] ? 'Configured' : 'Missing env' }}</span>
-                                </div>
-                            @endforeach
-                        </div>
+            <h3 class="text-sm font-semibold text-white">Platform Routing Notes</h3>
+            <div class="mt-4 space-y-4 text-sm text-gray-300">
+                <div class="rounded-xl border border-gray-800 px-4 py-3">
+                    <div class="font-medium text-white">SaaS admin-managed providers</div>
+                    <div class="mt-1 text-gray-500">Platform provider readiness, environment credentials, and live provider test actions are managed from the super admin voice console.</div>
+                </div>
+                <div class="rounded-xl border border-gray-800 px-4 py-3">
+                    <div class="font-medium text-white">What you control here</div>
+                    <div class="mt-1 text-gray-500">Choose the provider route for this business, set greeting/handoff copy, and manage which numbers or SIP channels are active.</div>
+                </div>
+                <div class="rounded-xl border border-gray-800 px-4 py-3">
+                    <div class="font-medium text-white">Current plan support</div>
+                    <div class="mt-1 {{ $voiceState['plan_supports_voice'] ? 'text-emerald-400' : 'text-amber-300' }}">
+                        {{ $voiceState['plan_supports_voice'] ? 'This plan includes voice agent access.' : 'This plan does not include the voice agent feature yet.' }}
                     </div>
-                @endforeach
+                </div>
             </div>
         </div>
     </div>
@@ -179,41 +179,6 @@
     </div>
 
     <div class="grid gap-6 xl:grid-cols-2">
-        <div class="rounded-2xl border border-gray-800 bg-gray-900/60 p-6 space-y-4">
-            <h3 class="text-sm font-semibold text-white">Provider Test Actions</h3>
-
-            <form method="POST" action="{{ route('settings.voice.test', 'transport') }}" class="grid gap-3 rounded-xl border border-gray-800 p-4">
-                @csrf
-                <div class="text-sm text-white">Test transport</div>
-                <div class="grid gap-3 md:grid-cols-2">
-                    <input name="to" class="rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-sm text-white" placeholder="To number or SIP URI">
-                    <input name="from" class="rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-sm text-white" placeholder="From number">
-                </div>
-                <button class="w-fit rounded-lg bg-indigo-500 px-3 py-2 text-sm font-medium text-white">Run Transport Test</button>
-            </form>
-
-            <form method="POST" action="{{ route('settings.voice.test', 'stt') }}" class="grid gap-3 rounded-xl border border-gray-800 p-4">
-                @csrf
-                <div class="text-sm text-white">Test speech-to-text</div>
-                <input name="audio_reference" class="rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-sm text-white" placeholder="https://example.com/audio.wav">
-                <button class="w-fit rounded-lg bg-indigo-500 px-3 py-2 text-sm font-medium text-white">Run STT Test</button>
-            </form>
-
-            <form method="POST" action="{{ route('settings.voice.test', 'llm') }}" class="grid gap-3 rounded-xl border border-gray-800 p-4">
-                @csrf
-                <div class="text-sm text-white">Test streaming LLM</div>
-                <textarea name="prompt" rows="3" class="rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-sm text-white" placeholder="Ask the voice agent to book a checkup tomorrow morning."></textarea>
-                <button class="w-fit rounded-lg bg-indigo-500 px-3 py-2 text-sm font-medium text-white">Run LLM Test</button>
-            </form>
-
-            <form method="POST" action="{{ route('settings.voice.test', 'tts') }}" class="grid gap-3 rounded-xl border border-gray-800 p-4">
-                @csrf
-                <div class="text-sm text-white">Test text-to-speech</div>
-                <textarea name="text" rows="3" class="rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-sm text-white" placeholder="Thank you for calling. Your appointment is confirmed."></textarea>
-                <button class="w-fit rounded-lg bg-indigo-500 px-3 py-2 text-sm font-medium text-white">Run TTS Test</button>
-            </form>
-        </div>
-
         <div class="rounded-2xl border border-gray-800 bg-gray-900/60 p-6">
             <h3 class="text-sm font-semibold text-white">Provider Notes</h3>
             <div class="mt-4 space-y-4 text-sm text-gray-300">
@@ -232,6 +197,20 @@
                 <div class="rounded-xl border border-gray-800 px-4 py-3">
                     <div class="font-medium text-white">ElevenLabs</div>
                     <div class="mt-1 text-gray-500">TTS tests return success if audio bytes are generated. Audio playback UI can be added later without changing the provider layer.</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="rounded-2xl border border-gray-800 bg-gray-900/60 p-6">
+            <h3 class="text-sm font-semibold text-white">Need a platform test?</h3>
+            <div class="mt-4 space-y-4 text-sm text-gray-300">
+                <div class="rounded-xl border border-gray-800 px-4 py-3">
+                    <div class="font-medium text-white">Provider readiness and live tests</div>
+                    <div class="mt-1 text-gray-500">Those controls now sit under the super admin voice console so platform credentials and live provider tests stay centralized.</div>
+                </div>
+                <div class="rounded-xl border border-gray-800 px-4 py-3">
+                    <div class="font-medium text-white">What to ask the SaaS admin for</div>
+                    <div class="mt-1 text-gray-500">They can verify Telnyx or SIP transport, run Deepgram STT tests, run the shared booking-brain LLM test, and confirm ElevenLabs TTS for your selected route.</div>
                 </div>
             </div>
         </div>
