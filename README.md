@@ -33,3 +33,4 @@ php artisan test
 
 - Render: [docs/deployment/render.md](docs/deployment/render.md)
 - Hetzner: [docs/deployment/hetzner.md](docs/deployment/hetzner.md)
+- Coolify: [docs/deployment/coolify.md](docs/deployment/coolify.md)
