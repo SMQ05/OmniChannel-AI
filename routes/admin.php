@@ -34,6 +34,7 @@ Route::prefix('admin')
             Route::get('/',                               [AdminBusinessController::class, 'index'])      ->name('index');
             Route::patch('/{business}/toggle',            [AdminBusinessController::class, 'toggle'])     ->name('toggle');
             Route::patch('/{business}/plan',              [AdminBusinessController::class, 'updatePlan']) ->name('update-plan');
+            Route::patch('/{business}/subscription',      [AdminBusinessController::class, 'updateSubscription'])->name('update-subscription');
             Route::post('/{business}/impersonate',        [AdminImpersonateController::class, 'start'])   ->name('impersonate');
         });
 

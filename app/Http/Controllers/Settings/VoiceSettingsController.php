@@ -4,9 +4,12 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Settings;
 
+use App\Exceptions\VoiceProviderException;
 use App\Http\Controllers\Controller;
 use App\Models\VoiceChannel;
+use App\Services\Usage\UsageMeteringService;
 use App\Services\Voice\VoiceConfigurationService;
+use App\Services\Voice\VoiceProviderResolver;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -87,5 +90,132 @@ class VoiceSettingsController extends Controller
 
         return redirect()->route('settings.voice')
             ->with('success', 'Voice channel ' . ($voiceChannel->is_enabled ? 'enabled.' : 'disabled.'));
+    }
+
+    public function testProvider(
+        Request $request,
+        string $component,
+        VoiceProviderResolver $voiceProviderResolver,
+        UsageMeteringService $usageMeteringService,
+    ): RedirectResponse {
+        $business = $request->user()->business;
+        abort_unless(in_array($component, ['transport', 'stt', 'llm', 'tts'], true), 404);
+
+        try {
+            $result = match ($component) {
+                'transport' => $this->testTransport($request, $business, $voiceProviderResolver, $usageMeteringService),
+                'stt' => $this->testSpeechToText($request, $business, $voiceProviderResolver, $usageMeteringService),
+                'llm' => $this->testLlm($request, $business, $voiceProviderResolver, $usageMeteringService),
+                'tts' => $this->testTextToSpeech($request, $business, $voiceProviderResolver, $usageMeteringService),
+            };
+        } catch (VoiceProviderException $exception) {
+            return redirect()->route('settings.voice')->withErrors(['voice_test' => $exception->getMessage()]);
+        }
+
+        return redirect()->route('settings.voice')->with('success', $result);
+    }
+
+    private function testTransport(
+        Request $request,
+        \App\Models\Business $business,
+        VoiceProviderResolver $resolver,
+        UsageMeteringService $usageMeteringService,
+    ): string {
+        $validated = $request->validate([
+            'to' => ['required', 'string', 'max:64'],
+            'from' => ['required', 'string', 'max:64'],
+        ]);
+
+        $result = $resolver->transport($business)->initiateCall($validated['to'], $validated['from'], [
+            'client_state' => base64_encode('kynex-voice-test'),
+        ]);
+
+        $usageMeteringService->record(
+            business: $business,
+            metric: 'voice_call_attempts',
+            channel: 'voice',
+            quantity: 1,
+            status: 'test',
+            meta: ['provider' => $result['provider'] ?? 'voice'],
+        );
+
+        return sprintf('Voice transport test accepted via %s.', ucfirst((string) ($result['provider'] ?? 'provider')));
+    }
+
+    private function testSpeechToText(
+        Request $request,
+        \App\Models\Business $business,
+        VoiceProviderResolver $resolver,
+        UsageMeteringService $usageMeteringService,
+    ): string {
+        $validated = $request->validate([
+            'audio_reference' => ['required', 'url', 'max:2000'],
+        ]);
+
+        $transcript = $resolver->stt($business)->transcribe($validated['audio_reference']);
+
+        $usageMeteringService->record(
+            business: $business,
+            metric: 'voice_minutes',
+            channel: 'voice',
+            quantity: 0,
+            status: 'test',
+            meta: ['transcript_excerpt' => mb_substr($transcript, 0, 120)],
+        );
+
+        return 'STT test transcript: ' . ($transcript !== '' ? mb_substr($transcript, 0, 160) : 'empty transcript returned.');
+    }
+
+    private function testLlm(
+        Request $request,
+        \App\Models\Business $business,
+        VoiceProviderResolver $resolver,
+        UsageMeteringService $usageMeteringService,
+    ): string {
+        $validated = $request->validate([
+            'prompt' => ['required', 'string', 'max:1000'],
+        ]);
+
+        $chunks = iterator_to_array($resolver->llm($business)->stream([
+            ['role' => 'system', 'content' => 'You are the voice receptionist for a booking SaaS. Keep replies brief.'],
+            ['role' => 'user', 'content' => $validated['prompt']],
+        ]));
+
+        $reply = trim(implode(' ', array_filter($chunks, static fn (string $chunk): bool => trim($chunk) !== '')));
+
+        $usageMeteringService->record(
+            business: $business,
+            metric: 'llm_tokens_estimated',
+            channel: 'voice',
+            quantity: max(1, (int) ceil(strlen($reply) / 4)),
+            status: 'test',
+            meta: ['provider' => $business->channel_config['voice']['llm_provider'] ?? config('voice.default_llm')],
+        );
+
+        return 'LLM voice test reply: ' . ($reply !== '' ? mb_substr($reply, 0, 160) : 'empty response returned.');
+    }
+
+    private function testTextToSpeech(
+        Request $request,
+        \App\Models\Business $business,
+        VoiceProviderResolver $resolver,
+        UsageMeteringService $usageMeteringService,
+    ): string {
+        $validated = $request->validate([
+            'text' => ['required', 'string', 'max:1000'],
+        ]);
+
+        $audio = $resolver->tts($business)->synthesize($validated['text']);
+
+        $usageMeteringService->record(
+            business: $business,
+            metric: 'voice_minutes',
+            channel: 'voice',
+            quantity: 0,
+            status: 'test',
+            meta: ['audio_bytes_base64' => strlen($audio)],
+        );
+
+        return 'TTS voice test generated audio payload successfully.';
     }
 }

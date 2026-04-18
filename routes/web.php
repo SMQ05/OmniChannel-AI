@@ -93,6 +93,7 @@ Route::middleware(['auth', 'require_business'])->group(function (): void {
         Route::post('/voice', [VoiceSettingsController::class, 'update'])->name('voice.update');
         Route::post('/voice/channels', [VoiceSettingsController::class, 'storeChannel'])->name('voice.channels.store');
         Route::patch('/voice/channels/{voiceChannel}/toggle', [VoiceSettingsController::class, 'toggleChannel'])->name('voice.channels.toggle');
+        Route::post('/voice/test/{component}', [VoiceSettingsController::class, 'testProvider'])->name('voice.test');
 
         Route::get('/subscription', [SubscriptionSettingsController::class, 'index'])->name('subscription');
 

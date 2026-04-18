@@ -118,4 +118,61 @@ class AdminBusinessController extends Controller
         return redirect()->route('admin.businesses.index')
             ->with('success', "{$business->name} updated to {$plan->name} plan.");
     }
+
+    public function updateSubscription(Request $request, Business $business): RedirectResponse
+    {
+        $validated = $request->validate([
+            'status' => ['required', 'string', 'max:32'],
+            'warn_at_ratio' => ['required', 'numeric', 'min:0', 'max:1'],
+            'enforce_limits' => ['sometimes', 'boolean'],
+            'admin_override' => ['sometimes', 'boolean'],
+            'included_quotas' => ['nullable', 'string'],
+            'feature_flags' => ['nullable', 'string'],
+            'overage_counters' => ['nullable', 'string'],
+            'current_period_start' => ['nullable', 'date'],
+            'current_period_end' => ['nullable', 'date', 'after_or_equal:current_period_start'],
+        ]);
+
+        $business->subscription()->updateOrCreate(
+            [],
+            [
+                'plan_id' => $business->subscription?->plan_id,
+                'status' => $validated['status'],
+                'warn_at_ratio' => (float) $validated['warn_at_ratio'],
+                'enforce_limits' => $request->boolean('enforce_limits'),
+                'admin_override' => $request->boolean('admin_override'),
+                'included_quotas' => $this->decodeJson($validated['included_quotas'] ?? null, 'included_quotas'),
+                'feature_flags' => $this->decodeJson($validated['feature_flags'] ?? null, 'feature_flags'),
+                'overage_counters' => $this->decodeJson($validated['overage_counters'] ?? null, 'overage_counters'),
+                'current_period_start' => $validated['current_period_start'] ?? $business->subscription?->current_period_start ?? now()->startOfMonth(),
+                'current_period_end' => $validated['current_period_end'] ?? $business->subscription?->current_period_end ?? now()->endOfMonth(),
+            ],
+        );
+
+        return redirect()->route('admin.businesses.index')
+            ->with('success', "Subscription controls updated for {$business->name}.");
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function decodeJson(?string $value, string $field): ?array
+    {
+        $trimmed = trim((string) $value);
+
+        if ($trimmed === '') {
+            return null;
+        }
+
+        /** @var mixed $decoded */
+        $decoded = json_decode($trimmed, true);
+
+        if (!is_array($decoded)) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                $field => 'Must be valid JSON object or array.',
+            ]);
+        }
+
+        return $decoded;
+    }
 }

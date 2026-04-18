@@ -5,14 +5,11 @@ declare(strict_types=1);
 namespace App\Providers;
 
 use App\Http\Middleware\RequireSuperAdmin;
+use App\Services\Voice\VoiceProviderResolver;
 use App\Voice\Contracts\LlmStreamInterface;
 use App\Voice\Contracts\SpeechToTextInterface;
 use App\Voice\Contracts\TelephonyTransportInterface;
 use App\Voice\Contracts\TextToSpeechInterface;
-use App\Voice\Null\NullLlmStream;
-use App\Voice\Null\NullSpeechToText;
-use App\Voice\Null\NullTelephonyTransport;
-use App\Voice\Null\NullTextToSpeech;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\ServiceProvider;
@@ -39,10 +36,10 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        $this->app->singleton(TelephonyTransportInterface::class, NullTelephonyTransport::class);
-        $this->app->singleton(SpeechToTextInterface::class, NullSpeechToText::class);
-        $this->app->singleton(LlmStreamInterface::class, NullLlmStream::class);
-        $this->app->singleton(TextToSpeechInterface::class, NullTextToSpeech::class);
+        $this->app->singleton(TelephonyTransportInterface::class, fn ($app) => $app->make(VoiceProviderResolver::class)->transport());
+        $this->app->singleton(SpeechToTextInterface::class, fn ($app) => $app->make(VoiceProviderResolver::class)->stt());
+        $this->app->singleton(LlmStreamInterface::class, fn ($app) => $app->make(VoiceProviderResolver::class)->llm());
+        $this->app->singleton(TextToSpeechInterface::class, fn ($app) => $app->make(VoiceProviderResolver::class)->tts());
     }
 
     /**

@@ -178,6 +178,65 @@
         </div>
     </div>
 
+    <div class="grid gap-6 xl:grid-cols-2">
+        <div class="rounded-2xl border border-gray-800 bg-gray-900/60 p-6 space-y-4">
+            <h3 class="text-sm font-semibold text-white">Provider Test Actions</h3>
+
+            <form method="POST" action="{{ route('settings.voice.test', 'transport') }}" class="grid gap-3 rounded-xl border border-gray-800 p-4">
+                @csrf
+                <div class="text-sm text-white">Test transport</div>
+                <div class="grid gap-3 md:grid-cols-2">
+                    <input name="to" class="rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-sm text-white" placeholder="To number or SIP URI">
+                    <input name="from" class="rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-sm text-white" placeholder="From number">
+                </div>
+                <button class="w-fit rounded-lg bg-indigo-500 px-3 py-2 text-sm font-medium text-white">Run Transport Test</button>
+            </form>
+
+            <form method="POST" action="{{ route('settings.voice.test', 'stt') }}" class="grid gap-3 rounded-xl border border-gray-800 p-4">
+                @csrf
+                <div class="text-sm text-white">Test speech-to-text</div>
+                <input name="audio_reference" class="rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-sm text-white" placeholder="https://example.com/audio.wav">
+                <button class="w-fit rounded-lg bg-indigo-500 px-3 py-2 text-sm font-medium text-white">Run STT Test</button>
+            </form>
+
+            <form method="POST" action="{{ route('settings.voice.test', 'llm') }}" class="grid gap-3 rounded-xl border border-gray-800 p-4">
+                @csrf
+                <div class="text-sm text-white">Test streaming LLM</div>
+                <textarea name="prompt" rows="3" class="rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-sm text-white" placeholder="Ask the voice agent to book a checkup tomorrow morning."></textarea>
+                <button class="w-fit rounded-lg bg-indigo-500 px-3 py-2 text-sm font-medium text-white">Run LLM Test</button>
+            </form>
+
+            <form method="POST" action="{{ route('settings.voice.test', 'tts') }}" class="grid gap-3 rounded-xl border border-gray-800 p-4">
+                @csrf
+                <div class="text-sm text-white">Test text-to-speech</div>
+                <textarea name="text" rows="3" class="rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-sm text-white" placeholder="Thank you for calling. Your appointment is confirmed."></textarea>
+                <button class="w-fit rounded-lg bg-indigo-500 px-3 py-2 text-sm font-medium text-white">Run TTS Test</button>
+            </form>
+        </div>
+
+        <div class="rounded-2xl border border-gray-800 bg-gray-900/60 p-6">
+            <h3 class="text-sm font-semibold text-white">Provider Notes</h3>
+            <div class="mt-4 space-y-4 text-sm text-gray-300">
+                <div class="rounded-xl border border-gray-800 px-4 py-3">
+                    <div class="font-medium text-white">Telnyx / SIP</div>
+                    <div class="mt-1 text-gray-500">Transport tests can initiate real outbound traffic. Use safe test numbers only.</div>
+                </div>
+                <div class="rounded-xl border border-gray-800 px-4 py-3">
+                    <div class="font-medium text-white">Deepgram</div>
+                    <div class="mt-1 text-gray-500">STT tests expect a public audio URL reachable by Deepgram.</div>
+                </div>
+                <div class="rounded-xl border border-gray-800 px-4 py-3">
+                    <div class="font-medium text-white">OpenRouter</div>
+                    <div class="mt-1 text-gray-500">The LLM test runs through the currently selected voice LLM provider and records estimated token usage.</div>
+                </div>
+                <div class="rounded-xl border border-gray-800 px-4 py-3">
+                    <div class="font-medium text-white">ElevenLabs</div>
+                    <div class="mt-1 text-gray-500">TTS tests return success if audio bytes are generated. Audio playback UI can be added later without changing the provider layer.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="rounded-2xl border border-gray-800 bg-gray-900/60 p-6">
         <h3 class="text-sm font-semibold text-white">Recent Call Logs</h3>
         <div class="mt-4 overflow-x-auto">

@@ -43,8 +43,8 @@
                 <th class="px-5 py-3"></th>
             </tr>
         </thead>
-        <tbody class="divide-y divide-gray-800">
-            @forelse($businesses as $business)
+        @forelse($businesses as $business)
+            <tbody x-data="{ openControls: false }" class="divide-y divide-gray-800">
                 <tr class="hover:bg-gray-800/30 transition-colors">
 
                     {{-- Business name + type --}}
@@ -123,22 +123,103 @@
 
                     {{-- Actions --}}
                     <td class="px-5 py-3.5">
-                        <form method="POST" action="{{ route('admin.businesses.impersonate', $business) }}">
-                            @csrf
-                            <button type="submit"
-                                    class="px-3 py-1.5 bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-lg text-xs font-medium
-                                           hover:bg-amber-500/30 transition-colors">
-                                Impersonate
+                        <div class="flex items-center gap-2 justify-end">
+                            <button type="button"
+                                    @click="openControls = !openControls"
+                                    class="px-3 py-1.5 bg-gray-800 text-gray-300 border border-gray-700 rounded-lg text-xs font-medium hover:bg-gray-700 transition-colors">
+                                Controls
                             </button>
+                            <form method="POST" action="{{ route('admin.businesses.impersonate', $business) }}">
+                                @csrf
+                                <button type="submit"
+                                        class="px-3 py-1.5 bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-lg text-xs font-medium
+                                               hover:bg-amber-500/30 transition-colors">
+                                    Impersonate
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                <tr x-show="openControls" x-cloak class="bg-gray-950/50">
+                    <td colspan="6" class="px-5 py-5">
+                        @php
+                            $subscription = $business->subscription;
+                        @endphp
+                        <form method="POST" action="{{ route('admin.businesses.update-subscription', $business) }}" class="grid gap-4 rounded-2xl border border-gray-800 bg-gray-900/60 p-5">
+                            @csrf
+                            @method('PATCH')
+
+                            <div class="flex items-center justify-between gap-4">
+                                <div>
+                                    <div class="text-sm font-semibold text-white">Subscription Controls</div>
+                                    <div class="text-xs text-gray-500">Override quotas, feature flags, and enforcement behavior for {{ $business->name }}.</div>
+                                </div>
+                                <div class="text-xs text-gray-500">
+                                    Current status: {{ $subscription?->status ?? $business->plan }}
+                                </div>
+                            </div>
+
+                            <div class="grid gap-4 md:grid-cols-4">
+                                <div>
+                                    <label class="mb-1 block text-xs text-gray-500">Status</label>
+                                    <input type="text" name="status" value="{{ $subscription?->status ?? $business->plan }}" class="w-full rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-sm text-white">
+                                </div>
+                                <div>
+                                    <label class="mb-1 block text-xs text-gray-500">Warn Ratio</label>
+                                    <input type="number" step="0.01" min="0" max="1" name="warn_at_ratio" value="{{ $subscription?->warn_at_ratio ?? 0.80 }}" class="w-full rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-sm text-white">
+                                </div>
+                                <div>
+                                    <label class="mb-1 block text-xs text-gray-500">Period Start</label>
+                                    <input type="date" name="current_period_start" value="{{ optional($subscription?->current_period_start)->toDateString() }}" class="w-full rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-sm text-white">
+                                </div>
+                                <div>
+                                    <label class="mb-1 block text-xs text-gray-500">Period End</label>
+                                    <input type="date" name="current_period_end" value="{{ optional($subscription?->current_period_end)->toDateString() }}" class="w-full rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-sm text-white">
+                                </div>
+                            </div>
+
+                            <div class="grid gap-4 md:grid-cols-3">
+                                <label class="flex items-center gap-2 text-sm text-gray-300">
+                                    <input type="checkbox" name="enforce_limits" value="1" {{ $subscription?->enforce_limits ? 'checked' : '' }}>
+                                    Enforce limits
+                                </label>
+                                <label class="flex items-center gap-2 text-sm text-gray-300">
+                                    <input type="checkbox" name="admin_override" value="1" {{ $subscription?->admin_override ? 'checked' : '' }}>
+                                    Admin override
+                                </label>
+                            </div>
+
+                            <div class="grid gap-4 xl:grid-cols-3">
+                                <div>
+                                    <label class="mb-1 block text-xs text-gray-500">Quota Overrides JSON</label>
+                                    <textarea name="included_quotas" rows="6" class="w-full rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 font-mono text-xs text-white">{{ json_encode($subscription?->included_quotas ?? [], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) }}</textarea>
+                                </div>
+                                <div>
+                                    <label class="mb-1 block text-xs text-gray-500">Feature Flags JSON</label>
+                                    <textarea name="feature_flags" rows="6" class="w-full rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 font-mono text-xs text-white">{{ json_encode($subscription?->feature_flags ?? [], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) }}</textarea>
+                                </div>
+                                <div>
+                                    <label class="mb-1 block text-xs text-gray-500">Overage Counters JSON</label>
+                                    <textarea name="overage_counters" rows="6" class="w-full rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 font-mono text-xs text-white">{{ json_encode($subscription?->overage_counters ?? [], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) }}</textarea>
+                                </div>
+                            </div>
+
+                            <div class="flex justify-end">
+                                <button type="submit" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 transition-colors">
+                                    Save Subscription Controls
+                                </button>
+                            </div>
                         </form>
                     </td>
                 </tr>
-            @empty
+            </tbody>
+        @empty
+            <tbody class="divide-y divide-gray-800">
                 <tr>
                     <td colspan="6" class="px-5 py-16 text-center text-gray-600">No businesses found.</td>
                 </tr>
-            @endforelse
-        </tbody>
+            </tbody>
+        @endforelse
     </table>
 
     @if($businesses->hasPages())
