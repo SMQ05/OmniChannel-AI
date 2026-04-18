@@ -31,6 +31,7 @@
                 $navItems = [
                     ['route' => 'admin.dashboard',        'label' => 'Overview'],
                     ['route' => 'admin.businesses.index', 'label' => 'All Businesses'],
+                    ['route' => 'admin.plans.index',      'label' => 'Plans'],
                     ['route' => 'admin.llm-keys.index',   'label' => 'LLM API Keys'],
                 ];
 

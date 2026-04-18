@@ -6,6 +6,7 @@ use App\Http\Controllers\Admin\AdminBusinessController;
 use App\Http\Controllers\Admin\AdminDashboardController;
 use App\Http\Controllers\Admin\AdminImpersonateController;
 use App\Http\Controllers\Admin\AdminLlmKeyController;
+use App\Http\Controllers\Admin\AdminPlanController;
 use App\Http\Middleware\RequireSuperAdmin;
 use Illuminate\Support\Facades\Route;
 
@@ -46,6 +47,12 @@ Route::prefix('admin')
             Route::post('/',              [AdminLlmKeyController::class, 'store'])   ->name('store');
             Route::patch('/{llmKey}/activate', [AdminLlmKeyController::class, 'activate']) ->name('activate');
             Route::delete('/{llmKey}',    [AdminLlmKeyController::class, 'destroy']) ->name('destroy');
+        });
+
+        Route::prefix('plans')->name('plans.')->group(function (): void {
+            Route::get('/', [AdminPlanController::class, 'index'])->name('index');
+            Route::post('/', [AdminPlanController::class, 'store'])->name('store');
+            Route::patch('/{plan}', [AdminPlanController::class, 'update'])->name('update');
         });
 
         // Horizon — exposed only for Redis/Horizon deployments

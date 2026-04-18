@@ -10,9 +10,9 @@
     <select name="plan"
             class="bg-gray-800 border border-gray-700 text-gray-300 text-sm rounded-lg px-3 py-2">
         <option value="">All Plans</option>
-        @foreach(['trial','starter','pro','enterprise'] as $p)
-            <option value="{{ $p }}" {{ ($filters['plan'] ?? '') === $p ? 'selected' : '' }}>
-                {{ ucfirst($p) }}
+        @foreach($plans as $plan)
+            <option value="{{ $plan->code }}" {{ ($filters['plan'] ?? '') === $plan->code ? 'selected' : '' }}>
+                {{ $plan->name }}
             </option>
         @endforeach
     </select>
@@ -55,29 +55,34 @@
 
                     {{-- Plan --}}
                     <td class="px-5 py-3.5">
+                        @php
+                            $activePlan = $business->subscription?->plan;
+                            $planCode = $activePlan?->code ?? $business->plan;
+                            $planLabel = $activePlan?->name ?? ucfirst($business->plan);
+                        @endphp
                         <div x-data="{ open: false }" class="relative">
                             <button @click="open = !open"
                                     class="px-2.5 py-1 rounded-full text-xs font-medium border transition-colors
-                                           {{ match($business->plan) {
+                                           {{ match($planCode) {
                                                'enterprise' => 'bg-purple-500/20 text-purple-400 border-purple-500/30',
                                                'pro'        => 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30',
                                                'starter'    => 'bg-blue-500/20 text-blue-400 border-blue-500/30',
                                                default      => 'bg-gray-700 text-gray-400 border-gray-600',
                                            } }}">
-                                {{ $business->plan }} ▾
+                                {{ $planLabel }} ▾
                             </button>
 
                             <div x-show="open" @click.outside="open = false"
                                  class="absolute z-10 top-full mt-1 left-0 bg-gray-800 border border-gray-700 rounded-lg shadow-xl overflow-hidden min-w-28"
                                  style="display:none">
-                                @foreach(['trial','starter','pro','enterprise'] as $plan)
+                                @foreach($plans as $plan)
                                     <form method="POST" action="{{ route('admin.businesses.update-plan', $business) }}">
                                         @csrf @method('PATCH')
-                                        <input type="hidden" name="plan" value="{{ $plan }}">
+                                        <input type="hidden" name="plan" value="{{ $plan->code }}">
                                         <button type="submit"
                                                 class="w-full px-4 py-2 text-left text-sm text-gray-300 hover:bg-gray-700 hover:text-white transition-colors
-                                                       {{ $business->plan === $plan ? 'text-indigo-400' : '' }}">
-                                            {{ ucfirst($plan) }}
+                                                       {{ $planCode === $plan->code ? 'text-indigo-400' : '' }}">
+                                            {{ $plan->name }}
                                         </button>
                                     </form>
                                 @endforeach

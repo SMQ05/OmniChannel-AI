@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Models\Appointment;
 use App\Models\Business;
+use App\Models\Plan;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -34,6 +34,7 @@ class AdminBusinessController extends Controller
     public function index(Request $request): View
     {
         $query = Business::query()
+            ->with(['subscription.plan'])
             ->withCount([
                 'appointments as appointments_this_month' => function ($q): void {
                     $q->whereMonth('start_time', now()->month)
@@ -60,10 +61,15 @@ class AdminBusinessController extends Controller
         }
 
         $businesses = $query->paginate(25)->withQueryString();
+        $plans = Plan::query()
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get();
 
         return view('admin.businesses.index', [
             'businesses' => $businesses,
             'filters'    => $request->only(['search', 'plan', 'status']),
+            'plans' => $plans,
         ]);
     }
 
@@ -93,12 +99,23 @@ class AdminBusinessController extends Controller
     public function updatePlan(Request $request, Business $business): RedirectResponse
     {
         $validated = $request->validate([
-            'plan' => ['required', Rule::in(['trial', 'starter', 'pro', 'enterprise'])],
+            'plan' => ['required', Rule::exists('plans', 'code')],
         ]);
 
-        $business->update($validated);
+        $plan = Plan::query()->where('code', $validated['plan'])->firstOrFail();
+
+        $business->update(['plan' => $plan->code]);
+        $business->subscription()->updateOrCreate(
+            [],
+            [
+                'plan_id' => $plan->id,
+                'status' => $plan->code,
+                'current_period_start' => $business->subscription?->current_period_start ?? now()->startOfMonth(),
+                'current_period_end' => $business->subscription?->current_period_end ?? now()->endOfMonth(),
+            ],
+        );
 
         return redirect()->route('admin.businesses.index')
-            ->with('success', "{$business->name} updated to {$validated['plan']} plan.");
+            ->with('success', "{$business->name} updated to {$plan->name} plan.");
     }
 }
