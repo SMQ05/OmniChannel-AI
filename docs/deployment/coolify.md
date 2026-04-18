@@ -1,6 +1,6 @@
 # Coolify Deployment For kynex OmniChannel AI
 
-This repository now supports a split Coolify deployment:
+This repository now supports a split Coolify deployment using `docker-compose.prod.yml`:
 
 - public Nginx web service
 - internal PHP-FPM app service
@@ -8,6 +8,17 @@ This repository now supports a split Coolify deployment:
 - scheduler service
 
 The previous single-container `artisan serve` + Supervisor topology has been removed from the Docker runtime.
+
+## Compose Stack
+
+Use `docker-compose.prod.yml` as the stack definition in Coolify. The service names are intentional:
+
+- `app` for PHP-FPM on port `9000`
+- `nginx` for public HTTP on port `8080`
+- `worker` for `queue:work`
+- `scheduler` for `schedule:work`
+
+The Nginx container defaults `APP_UPSTREAM=app:9000`, so the PHP-FPM service must keep the Compose service name `app`.
 
 ## Services
 
