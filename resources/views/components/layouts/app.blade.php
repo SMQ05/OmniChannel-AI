@@ -79,6 +79,9 @@
                         ['route' => 'settings.channels',     'label' => 'Channels'],
                         ['route' => 'settings.integrations', 'label' => 'Integrations'],
                         ['route' => 'settings.reminders',    'label' => 'Reminders'],
+                        ['route' => 'settings.voice',        'label' => 'Voice Agent'],
+                        ['route' => 'settings.subscription', 'label' => 'Usage & Plan'],
+                        ['route' => 'settings.diagnostics',  'label' => 'Diagnostics'],
                     ];
                 @endphp
                 @foreach($settingsItems as $item)

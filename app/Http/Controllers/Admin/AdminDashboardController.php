@@ -9,7 +9,8 @@ use App\Models\Business;
 use App\Models\ConversationLog;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Facades\Redis;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\View\View;
 
 /**
@@ -70,25 +71,36 @@ class AdminDashboardController extends Controller
     // -------------------------------------------------------------------------
 
     /**
-     * Read queue depths from Redis for each named queue.
-     *
-     * Falls back to null per queue if Redis is unreachable.
+     * Read queue depths for the current queue backend.
      *
      * @return array<string, int|null>
      */
     private function getQueueDepths(): array
     {
-        $queues = ['webhooks', 'ai', 'reminders', 'integrations'];
-        $depths = [];
+        $queues = collect(config('kynex.queues.named', []))
+            ->mapWithKeys(static fn (array $route, string $name): array => [$name => $route['queue'] ?? $name])
+            ->all();
 
-        foreach ($queues as $queue) {
-            try {
-                $depths[$queue] = (int) Queue::size($queue);
-            } catch (\Throwable) {
-                $depths[$queue] = null;
-            }
+        if (config('queue.default') === 'database' && Schema::hasTable('jobs')) {
+            return collect($queues)
+                ->mapWithKeys(static fn (string $queue, string $name): array => [
+                    $name => DB::table('jobs')->where('queue', $queue)->count(),
+                ])
+                ->all();
         }
 
-        return $depths;
+        if (config('queue.default') === 'redis') {
+            return collect($queues)
+                ->mapWithKeys(function (string $queue, string $name): array {
+                    try {
+                        return [$name => (int) Redis::llen("queues:{$queue}")];
+                    } catch (\Throwable) {
+                        return [$name => null];
+                    }
+                })
+                ->all();
+        }
+
+        return collect($queues)->mapWithKeys(static fn (string $queue, string $name): array => [$name => null])->all();
     }
 }

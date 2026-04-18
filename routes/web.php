@@ -13,6 +13,8 @@ use App\Http\Controllers\Settings\ChannelSettingsController;
 use App\Http\Controllers\Settings\DiagnosticsController;
 use App\Http\Controllers\Settings\IntegrationSettingsController;
 use App\Http\Controllers\Settings\ReminderSettingsController;
+use App\Http\Controllers\Settings\SubscriptionSettingsController;
+use App\Http\Controllers\Settings\VoiceSettingsController;
 use Illuminate\Support\Facades\Route;
 
 Route::redirect('/', '/dashboard');
@@ -86,6 +88,13 @@ Route::middleware(['auth', 'require_business'])->group(function (): void {
 
         Route::get('/reminders', [ReminderSettingsController::class, 'edit'])->name('reminders');
         Route::post('/reminders', [ReminderSettingsController::class, 'update'])->name('reminders.update');
+
+        Route::get('/voice', [VoiceSettingsController::class, 'edit'])->name('voice');
+        Route::post('/voice', [VoiceSettingsController::class, 'update'])->name('voice.update');
+        Route::post('/voice/channels', [VoiceSettingsController::class, 'storeChannel'])->name('voice.channels.store');
+        Route::patch('/voice/channels/{voiceChannel}/toggle', [VoiceSettingsController::class, 'toggleChannel'])->name('voice.channels.toggle');
+
+        Route::get('/subscription', [SubscriptionSettingsController::class, 'index'])->name('subscription');
 
         Route::get('/diagnostics', [DiagnosticsController::class, 'index'])->name('diagnostics');
         Route::post('/diagnostics/channels/{channel}/test-send', [DiagnosticsController::class, 'sendChannelTest'])->name('diagnostics.channels.test-send');

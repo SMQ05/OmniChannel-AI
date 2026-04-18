@@ -30,6 +30,13 @@
             <div class="mt-2 text-sm {{ $diagnostics['queue']['status']['ok'] ? 'text-emerald-400' : 'text-red-400' }}">
                 {{ $diagnostics['queue']['status']['detail'] }}
             </div>
+            @if($diagnostics['queue']['depths'] !== [])
+                <div class="mt-3 space-y-1 text-xs text-gray-500">
+                    @foreach($diagnostics['queue']['depths'] as $queue => $depth)
+                        <div>{{ $queue }}: {{ $depth ?? 'n/a' }}</div>
+                    @endforeach
+                </div>
+            @endif
             <div class="mt-3 text-xs text-gray-500">
                 Worker heartbeat:
                 {{ optional($diagnostics['queue']['worker_last_heartbeat'])->diffForHumans() ?? 'none' }}
@@ -60,6 +67,24 @@
                     Appointment #{{ $diagnostics['latest_sync']->id }} updated {{ $diagnostics['latest_sync']->updated_at->diffForHumans() }}
                 @else
                     No sync activity yet
+                @endif
+            </div>
+        </div>
+
+        <div class="rounded-2xl border border-gray-800 bg-gray-900/60 p-5">
+            <div class="text-xs uppercase tracking-wide text-gray-500">Voice Readiness</div>
+            <div class="mt-2 text-sm {{ $diagnostics['voice']['ready'] ? 'text-emerald-400' : 'text-amber-300' }}">
+                {{ $diagnostics['voice']['ready'] ? 'Voice is ready for controlled rollout.' : 'Voice still has blockers.' }}
+            </div>
+            <div class="mt-3 text-xs text-gray-500">
+                Active channels: {{ $diagnostics['voice']['summary']['active_channels'] }}
+                · Recent calls: {{ $diagnostics['voice']['summary']['recent_calls'] }}
+            </div>
+            <div class="mt-2 text-xs text-gray-500">
+                @if($diagnostics['voice']['issues'] === [])
+                    No voice issues detected.
+                @else
+                    {{ \Illuminate\Support\Str::limit(implode(' ', $diagnostics['voice']['issues']), 140) }}
                 @endif
             </div>
         </div>
@@ -158,6 +183,47 @@
             @empty
                 <div class="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">No startup issues detected.</div>
             @endforelse
+        </div>
+    </div>
+
+    <div class="grid gap-6 xl:grid-cols-2">
+        <div class="rounded-2xl border border-gray-800 bg-gray-900/60 p-6">
+            <h2 class="text-sm font-semibold text-white">Usage Snapshot</h2>
+            <div class="mt-4 space-y-4">
+                @foreach(collect($diagnostics['usage']['metrics'])->take(4) as $metric)
+                    <div>
+                        <div class="flex items-center justify-between gap-3 text-sm">
+                            <span class="text-white">{{ $metric['label'] }}</span>
+                            <span class="{{ $metric['warning'] ? 'text-amber-300' : 'text-gray-400' }}">
+                                {{ number_format($metric['used'], $metric['metric'] === 'llm_tokens_estimated' ? 0 : 1) }}
+                                @if($metric['limit'] !== null)
+                                    / {{ number_format($metric['limit'], $metric['metric'] === 'llm_tokens_estimated' ? 0 : 1) }}
+                                @endif
+                            </span>
+                        </div>
+                        <div class="mt-2 h-2 overflow-hidden rounded-full bg-gray-800">
+                            <div class="h-full rounded-full {{ $metric['warning'] ? 'bg-amber-400' : 'bg-indigo-500' }}" style="width: {{ $metric['ratio'] !== null ? max(min($metric['ratio'] * 100, 100), 4) : 8 }}%"></div>
+                        </div>
+                    </div>
+                @endforeach
+            </div>
+        </div>
+
+        <div class="rounded-2xl border border-gray-800 bg-gray-900/60 p-6">
+            <h2 class="text-sm font-semibold text-white">Latest Outbound Failures</h2>
+            <div class="mt-4 space-y-3">
+                @forelse($diagnostics['latest_outbound_failures'] as $failure)
+                    <div class="rounded-xl border border-gray-800 px-4 py-3">
+                        <div class="flex items-center justify-between gap-3">
+                            <div class="text-sm text-white">{{ ucfirst($failure->channel) }} → {{ $failure->recipient_platform_id }}</div>
+                            <div class="text-xs text-gray-500">{{ $failure->updated_at->diffForHumans() }}</div>
+                        </div>
+                        <div class="mt-1 text-xs text-red-300">{{ $failure->last_error ?: 'Provider reported a failure.' }}</div>
+                    </div>
+                @empty
+                    <div class="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">No recent outbound delivery failures.</div>
+                @endforelse
+            </div>
         </div>
     </div>
 

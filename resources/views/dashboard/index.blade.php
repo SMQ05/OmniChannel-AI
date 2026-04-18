@@ -52,6 +52,66 @@
     </div>
 </div>
 
+<div class="mb-6 grid grid-cols-1 xl:grid-cols-2 gap-6">
+    <div class="rounded-2xl bg-gray-900/60 backdrop-blur border border-gray-800 p-5">
+        <div class="flex items-center justify-between gap-4">
+            <div>
+                <h2 class="text-sm font-semibold text-white">Plan & Usage</h2>
+                <p class="mt-1 text-xs text-gray-500">{{ $usageSummary['plan']['name'] }} plan · {{ ucfirst($usageSummary['plan']['status']) }}</p>
+            </div>
+            <a href="{{ route('settings.subscription') }}" class="text-xs text-indigo-400 hover:text-indigo-300">Open usage →</a>
+        </div>
+
+        <div class="mt-4 space-y-4">
+            @foreach(collect($usageSummary['metrics'])->take(3) as $metric)
+                <div>
+                    <div class="flex items-center justify-between gap-3 text-xs">
+                        <span class="text-gray-300">{{ $metric['label'] }}</span>
+                        <span class="{{ $metric['warning'] ? 'text-amber-300' : 'text-gray-500' }}">
+                            {{ number_format($metric['used'], $metric['metric'] === 'llm_tokens_estimated' ? 0 : 1) }}
+                            @if($metric['limit'] !== null)
+                                / {{ number_format($metric['limit'], $metric['metric'] === 'llm_tokens_estimated' ? 0 : 1) }}
+                            @endif
+                        </span>
+                    </div>
+                    <div class="mt-2 h-2 overflow-hidden rounded-full bg-gray-800">
+                        <div class="h-full rounded-full {{ $metric['warning'] ? 'bg-amber-400' : 'bg-indigo-500' }}" style="width: {{ $metric['ratio'] !== null ? max(min($metric['ratio'] * 100, 100), 4) : 10 }}%"></div>
+                    </div>
+                </div>
+            @endforeach
+        </div>
+    </div>
+
+    <div class="rounded-2xl bg-gray-900/60 backdrop-blur border border-gray-800 p-5">
+        <div class="flex items-center justify-between gap-4">
+            <div>
+                <h2 class="text-sm font-semibold text-white">Voice Rollout</h2>
+                <p class="mt-1 text-xs text-gray-500">Feature-flagged product surface for phone and SIP call handling.</p>
+            </div>
+            <a href="{{ route('settings.voice') }}" class="text-xs text-indigo-400 hover:text-indigo-300">Open voice →</a>
+        </div>
+
+        <div class="mt-4 grid grid-cols-2 gap-4">
+            <div class="rounded-xl border border-gray-800 p-4">
+                <div class="text-xs uppercase tracking-wide text-gray-500">Readiness</div>
+                <div class="mt-2 text-lg font-semibold {{ $voiceState['ready'] ? 'text-emerald-400' : 'text-amber-300' }}">{{ $voiceState['ready'] ? 'Ready' : 'Needs setup' }}</div>
+            </div>
+            <div class="rounded-xl border border-gray-800 p-4">
+                <div class="text-xs uppercase tracking-wide text-gray-500">Active Channels</div>
+                <div class="mt-2 text-lg font-semibold text-white">{{ $voiceState['summary']['active_channels'] }}</div>
+            </div>
+        </div>
+
+        <div class="mt-4 text-xs text-gray-500">
+            @if($voiceState['issues'] === [])
+                Voice configuration is aligned with the current plan and platform provider readiness.
+            @else
+                {{ \Illuminate\Support\Str::limit(implode(' ', $voiceState['issues']), 180) }}
+            @endif
+        </div>
+    </div>
+</div>
+
 <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
 
     {{-- =====================================================================

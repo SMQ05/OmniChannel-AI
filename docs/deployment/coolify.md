@@ -14,7 +14,7 @@ The previous single-container `artisan serve` + Supervisor topology has been rem
 Use `docker-compose.prod.yml` as the stack definition in Coolify. The service names are intentional:
 
 - `app` for PHP-FPM on port `9000`
-- `nginx` for public HTTP on port `8080`
+- `nginx` for public HTTP on port `80`
 - `worker` for `queue:work`
 - `scheduler` for `schedule:work`
 
@@ -27,11 +27,11 @@ The Nginx container defaults `APP_UPSTREAM=app:9000`, so the PHP-FPM service mus
 - Source: GitHub repository
 - Build pack: Dockerfile
 - Dockerfile location: `./Dockerfile.nginx`
-- Port: `8080`
+- Port: `80`
 - Public: yes
 - Required env:
   - `APP_UPSTREAM=app:9000`
-  - `PORT=8080`
+  - `PORT=80`
 
 ### 2. PHP-FPM app service
 
@@ -95,7 +95,7 @@ Set only on the PHP-FPM app service when you want a one-time schema rollout:
   `php artisan queue:work database --queue=webhooks,integrations,reminders --sleep=1 --tries=3 --timeout=60 --max-time=3600`
 - Scheduler runs:
   `php artisan schedule:work`
-- Nginx handles HTTP on port `8080` and forwards PHP requests to the internal app service
+- Nginx handles HTTP on port `80` and forwards PHP requests to the internal app service
 
 ## First Deploy Checklist
 

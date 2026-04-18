@@ -45,5 +45,7 @@ class DiagnosticsPageTest extends TestCase
         $response->assertOk();
         $response->assertSee('Diagnostics');
         $response->assertSee('Webhook Endpoints');
+        $response->assertSee('Voice Readiness');
+        $response->assertSee('Latest Outbound Failures');
     }
 }

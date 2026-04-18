@@ -67,6 +67,7 @@ class StartupCheckService
         $issues = [];
         $channels = $business->channel_config ?? [];
         $integrations = $business->integration_config ?? [];
+        $voice = $channels['voice'] ?? [];
 
         if (($channels['whatsapp']['enabled'] ?? false) && (
             empty($channels['whatsapp']['phone_number_id'])
@@ -113,6 +114,27 @@ class StartupCheckService
                 'severity' => 'warning',
                 'title' => 'Google Sheets config incomplete',
                 'detail' => 'OAuth credentials, spreadsheet_id, and sheet_name are required for sync and diagnostics.',
+            ];
+        }
+
+        if (($voice['enabled'] ?? false) && !config('kynex.features.voice_agent')) {
+            $issues[] = [
+                'severity' => 'warning',
+                'title' => 'Voice enabled while global feature flag is off',
+                'detail' => 'The business has voice enabled in settings, but FEATURE_VOICE_AGENT is disabled at platform level.',
+            ];
+        }
+
+        if (($voice['enabled'] ?? false) && (
+            empty($voice['transport_provider'])
+            || empty($voice['stt_provider'])
+            || empty($voice['llm_provider'])
+            || empty($voice['tts_provider'])
+        )) {
+            $issues[] = [
+                'severity' => 'warning',
+                'title' => 'Voice provider routing incomplete',
+                'detail' => 'Select transport, STT, LLM, and TTS providers before enabling live voice rollout.',
             ];
         }
 

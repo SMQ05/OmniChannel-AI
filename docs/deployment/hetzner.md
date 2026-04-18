@@ -1,114 +1,335 @@
-# Hetzner Deployment For kynex OmniChannel AI
+# Hetzner Cloud Deployment For Kynex AI Booking
 
-## Stack
+This guide targets the current production architecture of the app:
 
-- Ubuntu 24.04 LTS
-- Nginx
-- PHP 8.4 + PHP-FPM
-- MySQL 8 or PostgreSQL 16
-- Redis or Valkey
-- Supervisor or systemd for queue workers
-- Cron for Laravel scheduler
-- Horizon only when `QUEUE_CONNECTION=redis`
+- Laravel 13
+- PHP 8.4
+- PostgreSQL
+- shared-database multi-tenancy with `business_id`
+- split services:
+  - `nginx`
+  - `app` (PHP-FPM)
+  - `worker`
+  - `scheduler`
+- database-backed queue as the primary supported mode
+- Redis / Horizon only as an optional later optimization
 
-## Provisioning
+## Recommended Topology
 
-1. Create the server and point DNS to it.
-2. Install packages:
-   `sudo apt update`
-   `sudo apt install -y nginx php8.4 php8.4-fpm php8.4-cli php8.4-mysql php8.4-pgsql php8.4-mbstring php8.4-xml php8.4-curl php8.4-zip unzip git redis-server supervisor`
-3. Install Composer.
-4. Create the application directory, clone the code, and copy `.env.example` to `.env`.
-5. Set production env vars, then run:
-   `composer install --no-dev --optimize-autoloader`
-   `php artisan key:generate`
-   `php artisan migrate --force`
-   `php artisan config:cache`
-   `php artisan view:cache`
+For a first stable production deployment on Hetzner Cloud:
 
-## Nginx Example
+- 1 Ubuntu 24.04 VM for app services
+- 1 managed or dedicated PostgreSQL instance
+- 1 optional Redis / Valkey instance only if you later switch queue/cache mode
+- DNS pointing `ai.kynexsolutions.com` to the VM
+- TLS via Nginx + Let's Encrypt or a fronting reverse proxy
 
-Use a server block that points `root` to `public/` and forwards PHP requests to PHP-FPM.
+If you want the lowest operational risk, keep PostgreSQL external or managed and keep queue/cache/session on database for the initial rollout.
 
-Key directives:
+## Two Supported Deployment Modes
 
-- `index index.php;`
+### Mode 1: Current Recommended Mode
+
+Use the existing split container stack from the repo:
+
+- `docker-compose.prod.yml`
+- `Dockerfile`
+- `Dockerfile.nginx`
+
+This keeps parity with the current Coolify-ready architecture.
+
+### Mode 2: Direct VM Services
+
+Run:
+
+- system Nginx
+- system PHP-FPM
+- `php artisan queue:work`
+- `php artisan schedule:work`
+
+This is supported later if you want to move away from containers, but container mode should be the default for now.
+
+## Prerequisites
+
+1. Provision an Ubuntu 24.04 server on Hetzner Cloud.
+2. Point DNS for your domain to the server IP.
+3. Open firewall ports:
+   - `22`
+   - `80`
+   - `443`
+4. Install Docker and Compose plugin:
+
+```bash
+sudo apt update
+sudo apt install -y ca-certificates curl gnupg lsb-release
+sudo install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+echo \
+  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
+  https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" \
+  | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+sudo apt update
+sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+sudo usermod -aG docker $USER
+```
+
+5. Re-login so your user picks up Docker group membership.
+
+## Application Checkout
+
+```bash
+cd /srv
+sudo mkdir -p /srv/kynex-ai-booking
+sudo chown -R $USER:$USER /srv/kynex-ai-booking
+git clone https://github.com/SMQ05/OmniChannel-AI.git /srv/kynex-ai-booking
+cd /srv/kynex-ai-booking
+cp .env.example .env
+```
+
+## Required Environment
+
+At minimum set these in `.env`:
+
+```env
+APP_ENV=production
+APP_DEBUG=false
+APP_URL=https://ai.kynexsolutions.com
+ASSET_URL=https://ai.kynexsolutions.com
+TRUSTED_PROXIES=*
+
+DB_CONNECTION=pgsql
+DB_HOST=your-postgres-host
+DB_PORT=5432
+DB_DATABASE=your-db
+DB_USERNAME=your-user
+DB_PASSWORD=your-password
+
+QUEUE_CONNECTION=database
+CACHE_STORE=database
+SESSION_DRIVER=database
+LOG_CHANNEL=stderr
+LOG_LEVEL=error
+
+QUEUE_WEBHOOK_NAME=webhooks
+QUEUE_INTEGRATIONS_NAME=integrations
+QUEUE_REMINDERS_NAME=reminders
+
+FEATURE_USAGE_ENFORCEMENT=true
+FEATURE_VOICE_AGENT=false
+```
+
+Add business-specific provider secrets only through env or app settings:
+
+- Meta / WhatsApp
+- Messenger
+- Google OAuth
+- Google Calendar
+- Google Sheets
+- OpenRouter / Anthropic / OpenAI / MiniMax as needed
+- Telnyx / SIP / Deepgram / ElevenLabs if enabling voice later
+
+## Build And Start The Split Stack
+
+The repo already contains the production compose topology.
+
+```bash
+docker compose -f docker-compose.prod.yml build
+docker compose -f docker-compose.prod.yml up -d
+```
+
+Expected services:
+
+- `app`
+- `nginx`
+- `worker`
+- `scheduler`
+
+## First Bootstrap
+
+Run bootstrap steps inside the PHP app container:
+
+```bash
+docker compose -f docker-compose.prod.yml exec app php artisan key:generate
+docker compose -f docker-compose.prod.yml exec app php artisan migrate --force
+docker compose -f docker-compose.prod.yml exec app php artisan optimize:clear
+docker compose -f docker-compose.prod.yml exec app php artisan config:cache
+docker compose -f docker-compose.prod.yml exec app php artisan view:cache
+```
+
+If this is the first production deploy, verify these tables exist after migration:
+
+- `jobs`
+- `failed_jobs`
+- `job_batches`
+- `sessions`
+- `cache`
+- `cache_locks`
+- `queue_worker_heartbeats`
+- `plans`
+- `business_subscriptions`
+- `usage_events`
+- `voice_channels`
+- `call_logs`
+
+## Queue Worker Process
+
+The current production-safe worker command is:
+
+```bash
+php artisan queue:work database --queue=webhooks,integrations,reminders --sleep=1 --tries=3 --timeout=60 --max-time=3600
+```
+
+This is already encoded in the worker container entrypoint.
+
+Keep database queue as the default until:
+
+- outbound traffic volume is materially higher
+- retry volume is substantial
+- you want Horizon visibility
+
+## Scheduler Process
+
+Use:
+
+```bash
+php artisan schedule:work
+```
+
+This is already encoded in the scheduler container entrypoint.
+
+## Nginx Notes
+
+If you keep the containerized topology, Nginx is already configured to proxy to:
+
+```nginx
+fastcgi_pass app:9000;
+```
+
+If you switch to system Nginx later, use a standard Laravel server block:
+
+- `root /var/www/kynex-ai-booking/public;`
 - `try_files $uri $uri/ /index.php?$query_string;`
 - `fastcgi_pass unix:/run/php/php8.4-fpm.sock;`
+- forward proxy headers correctly
 
-## Queue Workers
+Critical production note:
 
-Use Redis or Valkey in Hetzner production.
+- keep `TRUSTED_PROXIES=*`
+- keep HTTPS forced in production
 
-Worker command:
+## TLS / Reverse Proxy
 
-`php artisan queue:work redis --queue=webhooks,integrations,reminders --sleep=1 --tries=3 --timeout=60 --max-time=3600`
+You can terminate TLS either:
 
-If you enable Horizon:
+- directly in Nginx with Let's Encrypt
+- in a fronting proxy such as Traefik or Caddy
 
-1. Set `QUEUE_CONNECTION=redis`
-2. Start Horizon with `php artisan horizon`
-3. Expose `/horizon` behind authentication only
+If you terminate TLS ahead of Laravel:
 
-## Supervisor Example
+- forward `X-Forwarded-Proto`
+- keep `TRUSTED_PROXIES=*`
 
-`/etc/supervisor/conf.d/kynex-omnichannel-ai-worker.conf`
+## Validation After Deploy
 
-```ini
-[program:kynex-omnichannel-ai-worker]
-command=/usr/bin/php /var/www/kynex-omnichannel-ai/artisan queue:work redis --queue=webhooks,integrations,reminders --sleep=1 --tries=3 --timeout=60 --max-time=3600
-directory=/var/www/kynex-omnichannel-ai
-autostart=true
-autorestart=true
-user=www-data
-numprocs=1
-redirect_stderr=true
-stdout_logfile=/var/www/kynex-omnichannel-ai/storage/logs/worker.log
-stopwaitsecs=3600
+Run these checks after every release:
+
+```bash
+docker compose -f docker-compose.prod.yml ps
+docker compose -f docker-compose.prod.yml exec app php artisan about
+docker compose -f docker-compose.prod.yml exec app php artisan migrate:status
+docker compose -f docker-compose.prod.yml exec app php artisan queue:failed
+docker compose -f docker-compose.prod.yml exec app php artisan schedule:list
+docker compose -f docker-compose.prod.yml exec app php artisan route:list --path=api/webhook
 ```
 
-## systemd Alternative
+Then verify in the browser:
 
-`/etc/systemd/system/kynex-omnichannel-ai-worker.service`
+1. `https://ai.kynexsolutions.com/api/health`
+2. tenant dashboard
+3. `/settings/diagnostics`
+4. webhook URLs shown in diagnostics
+5. WhatsApp test send
+6. Messenger test send
+7. Google Calendar test
+8. Google Sheets test
 
-```ini
-[Unit]
-Description=kynex OmniChannel AI Queue Worker
-After=network.target
+## Backup Guidance
 
-[Service]
-User=www-data
-Group=www-data
-Restart=always
-WorkingDirectory=/var/www/kynex-omnichannel-ai
-ExecStart=/usr/bin/php artisan queue:work redis --queue=webhooks,integrations,reminders --sleep=1 --tries=3 --timeout=60 --max-time=3600
+Back up:
 
-[Install]
-WantedBy=multi-user.target
+- PostgreSQL database
+- `.env`
+- deployment manifests / compose files
+
+Do not rely on local container filesystems for business-critical persistence.
+
+Database should be the source of truth for:
+
+- jobs
+- sessions
+- cache
+- inbound webhook records
+- outbound attempt logs
+- usage events
+- voice channel metadata
+- call logs
+
+## Logging Guidance
+
+Keep:
+
+```env
+LOG_CHANNEL=stderr
+LOG_LEVEL=error
 ```
 
-## Scheduler
+Then ship container logs with:
 
-Prefer a dedicated systemd service for the scheduler:
+- Docker logging driver
+- journald
+- Loki / Grafana
+- Datadog
+- or another centralized log sink
 
-`php artisan schedule:work`
+## Restart Guidance
 
-## Zero-Downtime-ish Deploy Flow
+For normal deploys:
 
-1. Pull code to a release directory.
-2. Run `composer install --no-dev --optimize-autoloader`.
-3. Run `php artisan migrate --force`.
-4. Run `php artisan config:cache && php artisan view:cache`.
-5. Swap the symlink to the new release.
-6. Reload PHP-FPM and Nginx.
-7. Restart Supervisor/systemd workers.
-8. Verify `/settings/diagnostics`.
+```bash
+git pull --ff-only origin main
+docker compose -f docker-compose.prod.yml build
+docker compose -f docker-compose.prod.yml up -d
+docker compose -f docker-compose.prod.yml exec app php artisan migrate --force
+docker compose -f docker-compose.prod.yml exec app php artisan config:cache
+```
 
-## Smoke Commands
+To restart only queue processing:
 
-After each deploy, run:
+```bash
+docker compose -f docker-compose.prod.yml restart worker
+```
 
-1. `php artisan ops:smoke --url=https://your-domain.com/api/health`
-2. `php artisan queue:failed`
-3. `php artisan schedule:list`
-4. `php artisan route:list --path=api/webhook`
+To restart only the scheduler:
+
+```bash
+docker compose -f docker-compose.prod.yml restart scheduler
+```
+
+## Optional Future Redis / Horizon Mode
+
+Only switch when you need it operationally.
+
+When ready:
+
+1. provision Redis or Valkey
+2. set:
+
+```env
+QUEUE_CONNECTION=redis
+CACHE_STORE=redis
+```
+
+3. start Horizon or a Redis worker strategy
+4. expose `/horizon` only behind authenticated admin access
+
+Do not switch until you are ready to operate Redis as part of production.

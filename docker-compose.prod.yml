@@ -3,6 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    init: true
     restart: unless-stopped
     expose:
       - "9000"
@@ -13,14 +14,15 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.nginx
+    init: true
     restart: unless-stopped
     depends_on:
       - app
     environment:
       APP_UPSTREAM: app:9000
-      PORT: 80             # CHANGED FROM 8080
+      PORT: 80
     expose:
-      - "80"               # CHANGED FROM "8080"
+      - "80"
     networks:
       - coolify
 
@@ -28,9 +30,11 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    init: true
     restart: unless-stopped
     depends_on:
       - app
+    stop_grace_period: 70s
     command:
       - /usr/local/bin/start-queue
     networks:
@@ -40,15 +44,16 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    init: true
     restart: unless-stopped
     depends_on:
       - app
+    stop_grace_period: 70s
     command:
       - /usr/local/bin/start-scheduler
     networks:
       - coolify
 
-# This tells your containers to bridge into Coolify's database network!
 networks:
   coolify:
     external: true

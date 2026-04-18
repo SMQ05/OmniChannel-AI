@@ -7,10 +7,12 @@ namespace App\Services\Diagnostics;
 use App\Models\Appointment;
 use App\Models\Business;
 use App\Models\InboundWebhook;
+use App\Models\OutboundMessageAttempt;
 use App\Models\QueueWorkerHeartbeat;
+use App\Services\Usage\UsageSummaryService;
+use App\Services\Voice\VoiceConfigurationService;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Redis;
 use Illuminate\Support\Facades\Schema;
 use Throwable;
@@ -19,6 +21,8 @@ class DiagnosticsService
 {
     public function __construct(
         private readonly StartupCheckService $startupCheckService,
+        private readonly UsageSummaryService $usageSummaryService,
+        private readonly VoiceConfigurationService $voiceConfigurationService,
     ) {}
 
     /**
@@ -34,6 +38,8 @@ class DiagnosticsService
             ->where('business_id', $business->id)
             ->latest('created_at')
             ->first();
+        $usageSummary = $this->usageSummaryService->forBusiness($business);
+        $voiceSummary = $this->voiceConfigurationService->forBusiness($business);
 
         return [
             'webhooks' => [
@@ -44,6 +50,7 @@ class DiagnosticsService
                 'connection' => $queueConnection,
                 'queue_name' => $queueName,
                 'status' => $this->queueStatus($queueConnection, $queueName),
+                'depths' => $this->queueDepths(),
                 'worker_last_heartbeat' => $workerHeartbeat?->last_seen_at,
                 'failed_jobs_count' => Schema::hasTable('failed_jobs') ? DB::table('failed_jobs')->count() : null,
                 'recent_failed_jobs' => Schema::hasTable('failed_jobs')
@@ -57,6 +64,22 @@ class DiagnosticsService
             ],
             'latest_sync' => $latestSync,
             'latest_inbound' => $latestInbound,
+            'latest_outbound_failures' => OutboundMessageAttempt::query()
+                ->where('business_id', $business->id)
+                ->where('status', 'failed')
+                ->latest('updated_at')
+                ->limit(5)
+                ->get(),
+            'usage' => [
+                'plan' => $usageSummary['plan'],
+                'metrics' => $usageSummary['metrics'],
+            ],
+            'voice' => [
+                'ready' => $voiceSummary['ready'],
+                'issues' => $voiceSummary['issues'],
+                'summary' => $voiceSummary['summary'],
+                'platform' => $voiceSummary['platform'],
+            ],
             'version' => [
                 'app_version' => config('kynex.app_version'),
                 'git_commit' => config('kynex.git_commit'),
@@ -106,6 +129,42 @@ class DiagnosticsService
             'ok' => true,
             'detail' => 'Pending jobs: ' . DB::table('jobs')->count(),
         ];
+    }
+
+    /**
+     * @return array<string, int|null>
+     */
+    private function queueDepths(): array
+    {
+        $queues = collect(config('kynex.queues.named', []))
+            ->mapWithKeys(static fn (array $route, string $name): array => [$name => $route['queue'] ?? $name])
+            ->all();
+
+        if ($queues === []) {
+            return [];
+        }
+
+        if (config('queue.default') === 'database' && Schema::hasTable('jobs')) {
+            return collect($queues)
+                ->mapWithKeys(static fn (string $queue, string $name): array => [
+                    $name => DB::table('jobs')->where('queue', $queue)->count(),
+                ])
+                ->all();
+        }
+
+        if (config('queue.default') === 'redis') {
+            return collect($queues)
+                ->mapWithKeys(function (string $queue, string $name): array {
+                    try {
+                        return [$name => (int) Redis::llen("queues:{$queue}")];
+                    } catch (Throwable) {
+                        return [$name => null];
+                    }
+                })
+                ->all();
+        }
+
+        return collect($queues)->mapWithKeys(static fn (string $queue, string $name): array => [$name => null])->all();
     }
 
     /**

@@ -7,6 +7,8 @@ namespace App\Http\Controllers;
 use App\Http\Resources\AppointmentResource;
 use App\Models\Appointment;
 use App\Models\ConversationLog;
+use App\Services\Usage\UsageSummaryService;
+use App\Services\Voice\VoiceConfigurationService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -31,7 +33,11 @@ class DashboardController extends Controller
      * @param  Request  $request
      * @return View
      */
-    public function index(Request $request): View|RedirectResponse
+    public function index(
+        Request $request,
+        UsageSummaryService $usageSummaryService,
+        VoiceConfigurationService $voiceConfigurationService,
+    ): View|RedirectResponse
     {
         // Super admin has no business — redirect to the admin panel.
         if ($request->user()->role === 'super_admin') {
@@ -75,7 +81,9 @@ class DashboardController extends Controller
             'todayAppointments'   => AppointmentResource::collection($todayAppointments),
             'pendingHandoffs'     => $pendingHandoffs,
             'recentConversations' => $recentConversations,
+            'usageSummary'        => $usageSummaryService->forBusiness($business),
             'timezone'            => $timezone,
+            'voiceState'          => $voiceConfigurationService->forBusiness($business),
         ]);
     }
 

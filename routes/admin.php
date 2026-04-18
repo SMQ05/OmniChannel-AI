@@ -7,6 +7,7 @@ use App\Http\Controllers\Admin\AdminDashboardController;
 use App\Http\Controllers\Admin\AdminImpersonateController;
 use App\Http\Controllers\Admin\AdminLlmKeyController;
 use App\Http\Controllers\Admin\AdminPlanController;
+use App\Http\Controllers\Admin\AdminVoiceController;
 use App\Http\Middleware\RequireSuperAdmin;
 use Illuminate\Support\Facades\Route;
 
@@ -53,6 +54,10 @@ Route::prefix('admin')
             Route::get('/', [AdminPlanController::class, 'index'])->name('index');
             Route::post('/', [AdminPlanController::class, 'store'])->name('store');
             Route::patch('/{plan}', [AdminPlanController::class, 'update'])->name('update');
+        });
+
+        Route::prefix('voice')->name('voice.')->group(function (): void {
+            Route::get('/', [AdminVoiceController::class, 'index'])->name('index');
         });
 
         // Horizon — exposed only for Redis/Horizon deployments
