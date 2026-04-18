@@ -18,9 +18,9 @@ services:
       - app
     environment:
       APP_UPSTREAM: app:9000
-      PORT: 8080
+      PORT: 80             # CHANGED FROM 8080
     expose:
-      - "8080"
+      - "80"               # CHANGED FROM "8080"
     networks:
       - coolify
 
