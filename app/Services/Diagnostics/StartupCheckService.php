@@ -68,8 +68,9 @@ class StartupCheckService
         $channels = $business->channel_config ?? [];
         $integrations = $business->integration_config ?? [];
         $voice = $channels['voice'] ?? [];
+        $whatsAppProvider = (string) ($channels['whatsapp']['provider'] ?? 'meta_cloud');
 
-        if (($channels['whatsapp']['enabled'] ?? false) && (
+        if (($channels['whatsapp']['enabled'] ?? false) && $whatsAppProvider === 'meta_cloud' && (
             empty($channels['whatsapp']['phone_number_id'])
             || empty($channels['whatsapp']['access_token'])
             || empty($channels['whatsapp']['app_secret'])
@@ -78,6 +79,18 @@ class StartupCheckService
                 'severity' => 'critical',
                 'title' => 'WhatsApp config incomplete',
                 'detail' => 'phone_number_id, access_token, and app_secret are required for WhatsApp send/verify.',
+            ];
+        }
+
+        if (($channels['whatsapp']['enabled'] ?? false) && $whatsAppProvider === 'twilio' && (
+            empty($channels['whatsapp']['twilio_account_sid'])
+            || empty($channels['whatsapp']['twilio_auth_token'])
+            || empty($channels['whatsapp']['twilio_from_number'])
+        )) {
+            $issues[] = [
+                'severity' => 'critical',
+                'title' => 'Twilio WhatsApp config incomplete',
+                'detail' => 'twilio_account_sid, twilio_auth_token, and twilio_from_number are required for Twilio WhatsApp send/verify.',
             ];
         }
 

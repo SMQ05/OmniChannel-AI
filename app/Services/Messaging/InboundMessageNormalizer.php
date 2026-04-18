@@ -11,11 +11,13 @@ class InboundMessageNormalizer
     /**
      * @param  array<string, mixed>  $payload
      */
-    public function normalize(array $payload, string $channel, string $businessSlug): InboundMessageData
+    public function normalize(array $payload, string $channel, string $businessSlug, ?string $provider = null): InboundMessageData
     {
         return match ($channel) {
             'messenger' => $this->normalizeMessenger($payload, $businessSlug),
-            default => $this->normalizeWhatsApp($payload, $businessSlug),
+            default => $provider === 'twilio'
+                ? $this->normalizeTwilioWhatsApp($payload, $businessSlug)
+                : $this->normalizeWhatsApp($payload, $businessSlug),
         };
     }
 
@@ -77,6 +79,39 @@ class InboundMessageNormalizer
                 'text' => $text,
                 'message_type' => isset($message['attachments']) ? 'attachment' : 'text',
                 'timestamp' => isset($messaging['timestamp']) ? (string) $messaging['timestamp'] : null,
+            ],
+        );
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function normalizeTwilioWhatsApp(array $payload, string $businessSlug): InboundMessageData
+    {
+        $text = (string) ($payload['Body'] ?? '');
+        $senderId = (string) ($payload['From'] ?? '');
+        $senderName = (string) ($payload['ProfileName'] ?? '');
+        $messageSid = (string) ($payload['MessageSid'] ?? '');
+        $messageType = ((int) ($payload['NumMedia'] ?? 0)) > 0 ? 'attachment' : 'text';
+
+        return new InboundMessageData(
+            channel: 'whatsapp',
+            businessSlug: $businessSlug,
+            externalMessageId: $messageSid,
+            senderId: $senderId,
+            senderName: $senderName,
+            text: $text,
+            messageType: $messageType,
+            providerTimestamp: null,
+            normalizedPayload: [
+                'message_id' => $messageSid,
+                'sender_id' => $senderId,
+                'sender_name' => $senderName,
+                'text' => $text,
+                'message_type' => $messageType,
+                'timestamp' => null,
+                'recipient_id' => (string) ($payload['To'] ?? ''),
+                'provider' => 'twilio',
             ],
         );
     }

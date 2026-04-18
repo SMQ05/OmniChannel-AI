@@ -47,6 +47,41 @@ class WebhookControllerTest extends TestCase
         $this->assertDatabaseCount('inbound_webhooks', 0);
     }
 
+    public function test_valid_twilio_whatsapp_webhook_is_stored_and_dispatched(): void
+    {
+        Queue::fake();
+
+        $business = $this->makeTwilioBusiness();
+        $payload = [
+            'MessageSid' => 'SM123',
+            'From' => 'whatsapp:+15551234567',
+            'To' => 'whatsapp:+14155238886',
+            'Body' => 'hello from twilio',
+            'ProfileName' => 'Twilio Patient',
+            'NumMedia' => '0',
+        ];
+
+        $url = route('webhook.whatsapp.receive', ['slug' => $business->slug]);
+        $payloadString = $url;
+        ksort($payload);
+        foreach ($payload as $key => $value) {
+            $payloadString .= $key . $value;
+        }
+        $signature = base64_encode(hash_hmac('sha1', $payloadString, 'twilio-auth-token', true));
+
+        $response = $this->withHeader('X-Twilio-Signature', $signature)
+            ->post($url, $payload);
+
+        $response->assertOk()->assertJson(['status' => 'ok']);
+        $this->assertDatabaseHas('inbound_webhooks', [
+            'business_id' => $business->id,
+            'channel' => 'whatsapp',
+            'external_message_id' => 'SM123',
+            'status' => 'dispatched',
+        ]);
+        Queue::assertPushed(ProcessIncomingMessage::class, 1);
+    }
+
     private function makeBusiness(): Business
     {
         return Business::query()->create([
@@ -62,6 +97,34 @@ class WebhookControllerTest extends TestCase
                     'access_token' => 'token',
                     'verify_token' => 'verify-token',
                     'app_secret' => 'meta-app-secret',
+                ],
+                'messenger' => [
+                    'enabled' => false,
+                ],
+            ],
+            'integration_config' => [],
+            'reminder_settings' => [],
+            'ai_config' => ['llm_provider' => 'claude'],
+            'is_active' => true,
+            'plan' => 'trial',
+        ]);
+    }
+
+    private function makeTwilioBusiness(): Business
+    {
+        return Business::query()->create([
+            'name' => 'Clinic',
+            'business_type' => 'clinic',
+            'slug' => 'clinic-twilio',
+            'timezone' => 'UTC',
+            'locale' => 'en',
+            'channel_config' => [
+                'whatsapp' => [
+                    'enabled' => true,
+                    'provider' => 'twilio',
+                    'twilio_account_sid' => 'AC123',
+                    'twilio_auth_token' => 'twilio-auth-token',
+                    'twilio_from_number' => 'whatsapp:+14155238886',
                 ],
                 'messenger' => [
                     'enabled' => false,

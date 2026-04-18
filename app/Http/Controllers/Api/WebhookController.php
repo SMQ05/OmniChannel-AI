@@ -69,9 +69,7 @@ class WebhookController extends Controller
         }
 
         $rawBody = $request->getContent();
-        $header = $request->header('X-Hub-Signature-256', '');
-        $envKey = strtoupper($channel) . '_APP_SECRET';
-        $secret = $business->channel_config[$channel]['app_secret'] ?? env($envKey, '');
+        $provider = $channel === 'whatsapp' ? (string) ($business->channel_config['whatsapp']['provider'] ?? 'meta_cloud') : null;
         $correlationId = (string) Str::uuid();
 
         Log::withContext([
@@ -81,24 +79,23 @@ class WebhookController extends Controller
             'channel' => $channel,
         ]);
 
-        if (!$this->isValidSignature($rawBody, $header, $secret)) {
+        if (!$this->hasValidSignature($request, $business, $channel, $provider, $rawBody)) {
             Log::warning('Webhook HMAC validation failed.');
 
             return response()->json(['error' => 'Invalid signature.'], 403);
         }
 
         try {
-            /** @var array<string, mixed> $payload */
-            $payload = json_decode($rawBody, associative: true, flags: JSON_THROW_ON_ERROR);
-        } catch (JsonException $exception) {
-            Log::warning('Webhook payload JSON decoding failed.', [
+            $payload = $this->decodePayload($request, $channel, $provider, $rawBody);
+        } catch (JsonException|Throwable $exception) {
+            Log::warning('Webhook payload decoding failed.', [
                 'error' => $exception->getMessage(),
             ]);
 
             return response()->json(['error' => 'Invalid payload.'], 400);
         }
 
-        $normalized = $normalizer->normalize($payload, $channel, $slug);
+        $normalized = $normalizer->normalize($payload, $channel, $slug, $provider);
 
         $webhook = $recorder->record(
             business: $business,
@@ -189,13 +186,69 @@ class WebhookController extends Controller
         return response()->json(['status' => 'ok'], 200);
     }
 
-    private function isValidSignature(string $rawBody, string $header, string $secret): bool
+    private function hasValidSignature(Request $request, Business $business, string $channel, ?string $provider, string $rawBody): bool
     {
+        if ($channel === 'whatsapp' && $provider === 'twilio') {
+            $authToken = (string) ($business->channel_config['whatsapp']['twilio_auth_token'] ?? '');
+            $signature = $request->header('X-Twilio-Signature', '');
+
+            return $this->isValidTwilioSignature($request, $signature, $authToken);
+        }
+
+        $header = $request->header('X-Hub-Signature-256', '');
+        $envKey = strtoupper($channel) . '_APP_SECRET';
+        $secret = (string) ($business->channel_config[$channel]['app_secret'] ?? env($envKey, ''));
+
         if ($secret === '' || $header === '') {
             return false;
         }
 
         $expected = 'sha256=' . hash_hmac('sha256', $rawBody, $secret);
+
+        return hash_equals($expected, $header);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function decodePayload(Request $request, string $channel, ?string $provider, string $rawBody): array
+    {
+        if ($channel === 'whatsapp' && $provider === 'twilio') {
+            /** @var array<string, mixed> $payload */
+            $payload = $request->all();
+
+            return $payload;
+        }
+
+        /** @var array<string, mixed> $payload */
+        $payload = json_decode($rawBody, associative: true, flags: JSON_THROW_ON_ERROR);
+
+        return $payload;
+    }
+
+    private function isValidTwilioSignature(Request $request, string $header, string $authToken): bool
+    {
+        if ($authToken === '' || $header === '') {
+            return false;
+        }
+
+        $payload = $request->url();
+        $params = $request->post();
+        ksort($params);
+
+        foreach ($params as $key => $value) {
+            if (is_array($value)) {
+                foreach ($value as $item) {
+                    $payload .= $key . $item;
+                }
+
+                continue;
+            }
+
+            $payload .= $key . (string) $value;
+        }
+
+        $expected = base64_encode(hash_hmac('sha1', $payload, $authToken, true));
 
         return hash_equals($expected, $header);
     }

@@ -43,6 +43,7 @@ class AdminImpersonateController extends Controller
     public function start(Request $request, Business $business): RedirectResponse
     {
         $superAdmin = $request->user();
+        $redirectTo = $request->string('redirect_to')->toString();
 
         // Find the business_owner for this tenant
         $owner = User::query()
@@ -61,7 +62,11 @@ class AdminImpersonateController extends Controller
 
         Auth::login($owner);
 
-        return redirect()->route('dashboard')
+        if (!str_starts_with($redirectTo, '/settings/')) {
+            $redirectTo = route('dashboard');
+        }
+
+        return redirect()->to($redirectTo)
             ->with('info', "Now impersonating {$owner->name} ({$business->name}). Use the stop button to return to admin.");
     }
 

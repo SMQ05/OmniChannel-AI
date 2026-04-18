@@ -238,6 +238,31 @@
                                 </button>
                             </div>
                         </form>
+
+                        <div class="mt-4 grid gap-4 rounded-2xl border border-gray-800 bg-gray-900/60 p-5">
+                            <div>
+                                <div class="text-sm font-semibold text-white">Managed Setup Shortcuts</div>
+                                <div class="text-xs text-gray-500">Jump into the tenant setup pages as SaaS admin to handle one-time onboarding, AI training, and channel configuration.</div>
+                            </div>
+
+                            <div class="flex flex-wrap gap-2">
+                                @foreach ([
+                                    ['/settings/ai', 'AI Training'],
+                                    ['/settings/channels', 'Channels'],
+                                    ['/settings/integrations', 'Integrations'],
+                                    ['/settings/reminders', 'Reminders'],
+                                    ['/settings/voice', 'Voice'],
+                                ] as [$targetPath, $label])
+                                    <form method="POST" action="{{ route('admin.businesses.impersonate', $business) }}">
+                                        @csrf
+                                        <input type="hidden" name="redirect_to" value="{{ $targetPath }}">
+                                        <button type="submit" class="rounded-lg border border-indigo-500/30 bg-indigo-500/10 px-3 py-2 text-xs font-medium text-indigo-300 hover:bg-indigo-500/20">
+                                            Open {{ $label }}
+                                        </button>
+                                    </form>
+                                @endforeach
+                            </div>
+                        </div>
                     </td>
                 </tr>
             </tbody>

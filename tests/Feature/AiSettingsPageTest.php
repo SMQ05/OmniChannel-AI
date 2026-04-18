@@ -13,7 +13,7 @@ class AiSettingsPageTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_ai_preview_compiles_prompt_from_unsaved_form_values(): void
+    public function test_impersonated_admin_can_preview_unsaved_ai_prompt_values(): void
     {
         $business = Business::query()->create([
             'name' => 'Demo Clinic',
@@ -37,7 +37,7 @@ class AiSettingsPageTest extends TestCase
             'role' => 'business_owner',
         ]);
 
-        $response = $this->actingAs($user)->post(route('settings.ai.preview'), [
+        $response = $this->withSession(['impersonating_as' => 999])->actingAs($user)->post(route('settings.ai.preview'), [
             'ai_name' => 'Sara',
             'persona' => 'You are calm and efficient.',
             'tone' => 'friendly',

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Settings;
 
 use App\Http\Controllers\Controller;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -28,10 +29,13 @@ class AiSettingsController extends Controller
     {
         $business = $request->user()->business;
         $aiConfig = $business->ai_config ?? [];
+        $managedByAdmin = $this->managedByAdmin($request);
 
         return view('settings.ai', [
             'business' => $business,
             'aiConfig' => $aiConfig,
+            'managedByAdmin' => $managedByAdmin,
+            'compiledPrompt' => $this->compilePrompt($business, $aiConfig),
         ]);
     }
 
@@ -43,6 +47,8 @@ class AiSettingsController extends Controller
      */
     public function update(Request $request): RedirectResponse
     {
+        $this->ensureManagedByAdmin($request);
+
         $validated = $request->validate([
             'ai_name'      => ['required', 'string', 'max:100'],
             'persona'      => ['required', 'string', 'max:5000'],
@@ -78,6 +84,8 @@ class AiSettingsController extends Controller
      */
     public function preview(Request $request): \Illuminate\Http\Response
     {
+        $this->ensureManagedByAdmin($request);
+
         $business  = $request->user()->business;
         $aiConfig  = $this->normalisePreviewConfig($request, $business->ai_config ?? []);
 
@@ -152,5 +160,17 @@ class AiSettingsController extends Controller
         unset($data['_token']);
 
         return array_merge($fallback, array_filter($data, static fn (mixed $value): bool => $value !== null));
+    }
+
+    private function managedByAdmin(Request $request): bool
+    {
+        return $request->session()->has('impersonating_as') || $request->user()?->role === 'super_admin';
+    }
+
+    private function ensureManagedByAdmin(Request $request): void
+    {
+        if (!$this->managedByAdmin($request)) {
+            throw new AuthorizationException('AI training is managed by Kynex Solutions.');
+        }
     }
 }

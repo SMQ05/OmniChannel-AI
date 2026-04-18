@@ -254,4 +254,10 @@
     </div>
 </div>
 
+<div class="mt-6 text-center">
+    <a href="https://kynexsolutions.com" target="_blank" rel="noreferrer" class="text-xs text-gray-500 hover:text-indigo-300">
+        Kynex Solutions (kynexsolutions.com)
+    </a>
+</div>
+
 </x-layouts.app>

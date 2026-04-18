@@ -18,7 +18,7 @@ class VoiceProviderTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_business_user_can_run_voice_provider_tests(): void
+    public function test_impersonated_admin_can_run_voice_provider_tests(): void
     {
         Config::set('kynex.features.voice_agent', true);
         Config::set('voice.providers.transport.telnyx.api_key', 'telnyx-key');
@@ -105,26 +105,26 @@ class VoiceProviderTest extends TestCase
             }
         });
 
-        $this->actingAs($user)
+        $this->withSession(['impersonating_as' => 999])->actingAs($user)
             ->post(route('settings.voice.test', 'transport'), [
                 'to' => '+15550001111',
                 'from' => '+15550002222',
             ])
             ->assertRedirect(route('settings.voice'));
 
-        $this->actingAs($user)
+        $this->withSession(['impersonating_as' => 999])->actingAs($user)
             ->post(route('settings.voice.test', 'stt'), [
                 'audio_reference' => 'https://example.com/audio.wav',
             ])
             ->assertRedirect(route('settings.voice'));
 
-        $this->actingAs($user)
+        $this->withSession(['impersonating_as' => 999])->actingAs($user)
             ->post(route('settings.voice.test', 'llm'), [
                 'prompt' => 'Book me for tomorrow morning.',
             ])
             ->assertRedirect(route('settings.voice'));
 
-        $this->actingAs($user)
+        $this->withSession(['impersonating_as' => 999])->actingAs($user)
             ->post(route('settings.voice.test', 'tts'), [
                 'text' => 'Your booking is confirmed.',
             ])

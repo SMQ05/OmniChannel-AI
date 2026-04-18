@@ -16,7 +16,7 @@ class VoiceSettingsPageTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_business_user_can_view_and_update_voice_settings(): void
+    public function test_business_user_sees_read_only_voice_settings_page(): void
     {
         $business = Business::query()->create([
             'name' => 'Clinic',
@@ -60,51 +60,16 @@ class VoiceSettingsPageTest extends TestCase
             'role' => 'business_owner',
         ]);
 
-        $this->actingAs($user)
-            ->post(route('settings.voice.update'), [
-                'voice' => [
-                    'enabled' => '1',
-                    'transport_provider' => 'telnyx',
-                    'stt_provider' => 'deepgram',
-                    'llm_provider' => 'openrouter',
-                    'tts_provider' => 'elevenlabs',
-                    'greeting_message' => 'Hello from voice',
-                ],
-            ])
-            ->assertRedirect(route('settings.voice'));
-
-        $business->refresh();
-
-        $this->assertTrue((bool) $business->channel_config['voice']['enabled']);
-        $this->assertSame('telnyx', $business->channel_config['voice']['transport_provider']);
-
-        $this->actingAs($user)
-            ->post(route('settings.voice.channels.store'), [
-                'provider' => 'telnyx',
-                'phone_number' => '+15550100',
-                'is_enabled' => '1',
-                'config' => ['label' => 'Main line'],
-            ])
-            ->assertRedirect(route('settings.voice'));
-
-        $this->assertDatabaseHas('voice_channels', [
-            'business_id' => $business->id,
-            'provider' => 'telnyx',
-            'phone_number' => '+15550100',
-            'is_enabled' => true,
-        ]);
-
         $response = $this->actingAs($user)->get(route('settings.voice'));
 
         $response->assertOk();
         $response->assertSee('Voice Agent');
+        $response->assertSee('managed by Kynex Solutions', false);
         $response->assertSee('Business Voice Settings');
-        $response->assertSee('Configured Voice Channels');
-        $response->assertSee('Main line');
         $response->assertDontSee('Provider Test Actions');
     }
 
-    public function test_business_user_can_toggle_existing_voice_channel(): void
+    public function test_impersonated_admin_can_update_and_toggle_voice_settings(): void
     {
         $business = Business::query()->create([
             'name' => 'Clinic',
@@ -136,7 +101,36 @@ class VoiceSettingsPageTest extends TestCase
             'is_enabled' => false,
         ]);
 
+        $this->withSession(['impersonating_as' => 999])
+            ->actingAs($user)
+            ->post(route('settings.voice.update'), [
+                'voice' => [
+                    'enabled' => '1',
+                    'transport_provider' => 'telnyx',
+                    'stt_provider' => 'deepgram',
+                    'llm_provider' => 'openrouter',
+                    'tts_provider' => 'elevenlabs',
+                    'greeting_message' => 'Hello from voice',
+                ],
+            ])
+            ->assertRedirect(route('settings.voice'));
+
+        $this->withSession(['impersonating_as' => 999])
+            ->actingAs($user)
+            ->post(route('settings.voice.channels.store'), [
+                'provider' => 'telnyx',
+                'phone_number' => '+15550100',
+                'is_enabled' => '1',
+                'config' => ['label' => 'Main line'],
+            ])
+            ->assertRedirect(route('settings.voice'));
+
         $this->actingAs($user)
+            ->get(route('settings.voice'))
+            ->assertSee('Main line');
+
+        $this->withSession(['impersonating_as' => 999])
+            ->actingAs($user)
             ->patch(route('settings.voice.channels.toggle', $channel))
             ->assertRedirect(route('settings.voice'));
 

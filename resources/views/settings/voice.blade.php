@@ -6,6 +6,12 @@
 @endphp
 
 <div class="space-y-6">
+    @if(!$managedByAdmin)
+        <div class="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-5 py-4 text-sm text-amber-200">
+            Voice settings are managed by Kynex Solutions. The clinic team can review the current rollout here, but platform and business changes are handled by SaaS admin.
+        </div>
+    @endif
+
     <div class="rounded-2xl border border-gray-800 bg-gray-900/60 p-6">
         <div class="flex flex-wrap items-start justify-between gap-4">
             <div>
@@ -94,7 +100,9 @@
                 <textarea name="voice[notes]" rows="3" class="w-full rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-sm text-white">{{ old('voice.notes', $settings['notes'] ?? '') }}</textarea>
             </div>
 
-            <button class="rounded-lg bg-indigo-500 px-4 py-2 text-sm font-medium text-white">Save Voice Settings</button>
+            @if($managedByAdmin)
+                <button class="rounded-lg bg-indigo-500 px-4 py-2 text-sm font-medium text-white">Save Voice Settings</button>
+            @endif
         </form>
 
         <div class="rounded-2xl border border-gray-800 bg-gray-900/60 p-6">
@@ -148,7 +156,9 @@
                 <input type="checkbox" name="is_enabled" value="1" class="rounded border-gray-700 bg-gray-950 text-indigo-500">
                 Activate immediately
             </label>
-            <button class="rounded-lg bg-indigo-500 px-4 py-2 text-sm font-medium text-white">Save Voice Channel</button>
+            @if($managedByAdmin)
+                <button class="rounded-lg bg-indigo-500 px-4 py-2 text-sm font-medium text-white">Save Voice Channel</button>
+            @endif
         </form>
 
         <div class="rounded-2xl border border-gray-800 bg-gray-900/60 p-6">
@@ -162,6 +172,7 @@
                                 <div class="mt-1 text-xs text-gray-500">{{ $channel->phone_number ?: 'No number assigned yet' }}</div>
                                 <div class="mt-1 text-xs text-gray-500">Flow: {{ $channel->config['inbound_flow'] ?? 'default' }}</div>
                             </div>
+                            @if($managedByAdmin)
                             <form method="POST" action="{{ route('settings.voice.channels.toggle', $channel) }}">
                                 @csrf
                                 @method('PATCH')
@@ -169,6 +180,7 @@
                                     {{ $channel->is_enabled ? 'Disable' : 'Enable' }}
                                 </button>
                             </form>
+                            @endif
                         </div>
                     </div>
                 @empty

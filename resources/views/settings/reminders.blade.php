@@ -1,7 +1,13 @@
 <x-layouts.app title="Reminder Settings">
 
 <div class="max-w-2xl mx-auto">
+    @if(!$managedByAdmin)
+        <div class="mb-6 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-5 py-4 text-sm text-amber-200">
+            Reminder rules are managed by Kynex Solutions. This page is read-only for the clinic team.
+        </div>
+    @endif
     <form method="POST" action="{{ route('settings.reminders.update') }}"
+          class="{{ !$managedByAdmin ? 'pointer-events-none opacity-80' : '' }}"
           x-data="{
               rules: @js($reminderSettings['reminders'] ?? []),
               add() {
@@ -20,10 +26,12 @@
             <p class="text-sm text-gray-500">
                 Reminders are sent via the same channel the patient used to book.
             </p>
+            @if($managedByAdmin)
             <button type="button" @click="add()"
                     class="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded-lg transition-colors">
                 + Add Rule
             </button>
+            @endif
         </div>
 
         {{-- Rules list --}}
@@ -50,6 +58,7 @@
                             </div>
                         </div>
                         <button type="button" @click="remove(i)"
+                                @if(!$managedByAdmin) disabled @endif
                                 class="mt-5 text-gray-600 hover:text-red-400 transition-colors">
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
@@ -109,12 +118,14 @@
             </template>
         </div>
 
+        @if($managedByAdmin)
         <div class="flex justify-end mt-6">
             <button type="submit"
                     class="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded-lg transition-colors">
                 Save Reminder Settings
             </button>
         </div>
+        @endif
     </form>
 </div>
 

@@ -11,6 +11,7 @@ use App\Models\VoiceChannel;
 use App\Services\Usage\UsageMeteringService;
 use App\Services\Voice\VoiceConfigurationService;
 use App\Services\Voice\VoiceProviderResolver;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -26,11 +27,14 @@ class VoiceSettingsController extends Controller
         return view('settings.voice', [
             'business' => $business,
             'voiceState' => $voiceState,
+            'managedByAdmin' => $this->managedByAdmin($request),
         ]);
     }
 
     public function update(Request $request): RedirectResponse
     {
+        $this->ensureManagedByAdmin($request);
+
         $validated = $request->validate([
             'voice.enabled' => ['boolean'],
             'voice.transport_provider' => ['nullable', Rule::in(['telnyx', 'sip'])],
@@ -55,6 +59,8 @@ class VoiceSettingsController extends Controller
 
     public function storeChannel(Request $request): RedirectResponse
     {
+        $this->ensureManagedByAdmin($request);
+
         $validated = $request->validate([
             'channel_id' => ['nullable', 'integer'],
             'provider' => ['required', Rule::in(['telnyx', 'sip'])],
@@ -82,6 +88,8 @@ class VoiceSettingsController extends Controller
 
     public function toggleChannel(Request $request, VoiceChannel $voiceChannel): RedirectResponse
     {
+        $this->ensureManagedByAdmin($request);
+
         $business = $request->user()->business;
         abort_unless($voiceChannel->business_id === $business->id, 404);
 
@@ -100,6 +108,8 @@ class VoiceSettingsController extends Controller
         UsageMeteringService $usageMeteringService,
         AppointmentAgent $appointmentAgent,
     ): RedirectResponse {
+        $this->ensureManagedByAdmin($request);
+
         $business = $request->user()->business;
         abort_unless(in_array($component, ['transport', 'stt', 'llm', 'tts'], true), 404);
 
@@ -222,5 +232,17 @@ class VoiceSettingsController extends Controller
         );
 
         return 'TTS voice test generated audio payload successfully.';
+    }
+
+    private function managedByAdmin(Request $request): bool
+    {
+        return $request->session()->has('impersonating_as') || $request->user()?->role === 'super_admin';
+    }
+
+    private function ensureManagedByAdmin(Request $request): void
+    {
+        if (!$this->managedByAdmin($request)) {
+            throw new AuthorizationException('Voice setup is managed by Kynex Solutions.');
+        }
     }
 }

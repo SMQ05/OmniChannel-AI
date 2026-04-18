@@ -1,12 +1,17 @@
 <x-layouts.app title="Channel Settings">
 
 <div class="max-w-2xl mx-auto">
-    <form method="POST" action="{{ route('settings.channels.update') }}" class="space-y-6">
+    @if(!$managedByAdmin)
+        <div class="mb-6 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-5 py-4 text-sm text-amber-200">
+            Messaging channels are managed by Kynex Solutions. This page is read-only for the clinic team.
+        </div>
+    @endif
+    <form method="POST" action="{{ route('settings.channels.update') }}" class="space-y-6 {{ !$managedByAdmin ? 'pointer-events-none opacity-80' : '' }}">
         @csrf
 
         {{-- WhatsApp --}}
         <div class="rounded-2xl bg-gray-900/60 backdrop-blur border border-gray-800 overflow-hidden"
-             x-data="{ enabled: {{ $channelConfig['whatsapp']['enabled'] ?? false ? 'true' : 'false' }} }">
+             x-data="{ enabled: {{ $channelConfig['whatsapp']['enabled'] ?? false ? 'true' : 'false' }}, provider: '{{ old('whatsapp.provider', $channelConfig['whatsapp']['provider'] ?? 'meta_cloud') }}' }">
 
             <div class="px-5 py-4 border-b border-gray-800 flex items-center justify-between">
                 <div class="flex items-center gap-3">
@@ -21,6 +26,7 @@
                 <label class="flex items-center cursor-pointer">
                     <div class="relative">
                         <input type="checkbox" name="whatsapp[enabled]" value="1" x-model="enabled"
+                               @if(!$managedByAdmin) disabled @endif
                                {{ $channelConfig['whatsapp']['enabled'] ?? false ? 'checked' : '' }}
                                class="sr-only">
                         <div :class="enabled ? 'bg-indigo-600' : 'bg-gray-700'"
@@ -33,8 +39,20 @@
 
             <div x-show="enabled" class="p-5 space-y-4">
                 <div>
+                    <label class="block text-xs text-gray-500 mb-1">WhatsApp Provider</label>
+                    <select name="whatsapp[provider]" x-model="provider" @if(!$managedByAdmin) disabled @endif
+                            class="w-full bg-gray-800 border border-gray-700 text-gray-100 text-sm rounded-lg px-3 py-2 focus:ring-indigo-500 focus:border-indigo-500">
+                        <option value="meta_cloud">Official WhatsApp Cloud API</option>
+                        <option value="twilio">Twilio WhatsApp</option>
+                    </select>
+                    <p class="mt-1 text-xs text-gray-600">Meta Cloud API remains the recommended default for the current production webhook flow.</p>
+                </div>
+
+                <div x-show="provider === 'meta_cloud'" class="space-y-4">
+                <div>
                     <label class="block text-xs text-gray-500 mb-1">Phone Number ID</label>
                     <input type="text" name="whatsapp[phone_number_id]"
+                           @if(!$managedByAdmin) disabled @endif
                            value="{{ old('whatsapp.phone_number_id', $channelConfig['whatsapp']['phone_number_id'] ?? '') }}"
                            class="w-full bg-gray-800 border border-gray-700 text-gray-100 text-sm rounded-lg px-3 py-2
                                   focus:ring-indigo-500 focus:border-indigo-500">
@@ -42,6 +60,7 @@
                 <div>
                     <label class="block text-xs text-gray-500 mb-1">Access Token</label>
                     <input type="password" name="whatsapp[access_token]"
+                           @if(!$managedByAdmin) disabled @endif
                            value="{{ old('whatsapp.access_token', $channelConfig['whatsapp']['access_token'] ?? '') }}"
                            class="w-full bg-gray-800 border border-gray-700 text-gray-100 text-sm rounded-lg px-3 py-2
                                   focus:ring-indigo-500 focus:border-indigo-500">
@@ -49,6 +68,7 @@
                 <div>
                     <label class="block text-xs text-gray-500 mb-1">Verify Token</label>
                     <input type="text" name="whatsapp[verify_token]"
+                           @if(!$managedByAdmin) disabled @endif
                            value="{{ old('whatsapp.verify_token', $channelConfig['whatsapp']['verify_token'] ?? '') }}"
                            class="w-full bg-gray-800 border border-gray-700 text-gray-100 text-sm rounded-lg px-3 py-2
                                   focus:ring-indigo-500 focus:border-indigo-500">
@@ -56,6 +76,7 @@
                 <div>
                     <label class="block text-xs text-gray-500 mb-1">App Secret</label>
                     <input type="password" name="whatsapp[app_secret]"
+                           @if(!$managedByAdmin) disabled @endif
                            value="{{ old('whatsapp.app_secret', $channelConfig['whatsapp']['app_secret'] ?? '') }}"
                            class="w-full bg-gray-800 border border-gray-700 text-gray-100 text-sm rounded-lg px-3 py-2
                                   focus:ring-indigo-500 focus:border-indigo-500">
@@ -76,8 +97,50 @@
                         </button>
                     </div>
                 </div>
+                </div>
+
+                <div x-show="provider === 'twilio'" class="space-y-4">
+                    <div>
+                        <label class="block text-xs text-gray-500 mb-1">Twilio Account SID</label>
+                        <input type="text" name="whatsapp[twilio_account_sid]"
+                               @if(!$managedByAdmin) disabled @endif
+                               value="{{ old('whatsapp.twilio_account_sid', $channelConfig['whatsapp']['twilio_account_sid'] ?? '') }}"
+                               class="w-full bg-gray-800 border border-gray-700 text-gray-100 text-sm rounded-lg px-3 py-2 focus:ring-indigo-500 focus:border-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs text-gray-500 mb-1">Twilio Auth Token</label>
+                        <input type="password" name="whatsapp[twilio_auth_token]"
+                               @if(!$managedByAdmin) disabled @endif
+                               value="{{ old('whatsapp.twilio_auth_token', $channelConfig['whatsapp']['twilio_auth_token'] ?? '') }}"
+                               class="w-full bg-gray-800 border border-gray-700 text-gray-100 text-sm rounded-lg px-3 py-2 focus:ring-indigo-500 focus:border-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs text-gray-500 mb-1">Twilio WhatsApp From Number</label>
+                        <input type="text" name="whatsapp[twilio_from_number]"
+                               @if(!$managedByAdmin) disabled @endif
+                               value="{{ old('whatsapp.twilio_from_number', $channelConfig['whatsapp']['twilio_from_number'] ?? '') }}"
+                               placeholder="whatsapp:+14155238886"
+                               class="w-full bg-gray-800 border border-gray-700 text-gray-100 text-sm rounded-lg px-3 py-2 focus:ring-indigo-500 focus:border-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs text-gray-500 mb-1">Inbound Webhook URL</label>
+                        <div class="flex gap-2">
+                            <input type="text" readonly
+                                   value="{{ $webhookBase }}/whatsapp/{{ $business->slug }}"
+                                   class="flex-1 bg-gray-700/50 border border-gray-700 text-gray-400 text-xs rounded-lg px-3 py-2 font-mono">
+                            <button type="button"
+                                    x-data
+                                    @click="navigator.clipboard.writeText('{{ $webhookBase }}/whatsapp/{{ $business->slug }}')"
+                                    class="px-3 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs rounded-lg transition-colors">
+                                Copy
+                            </button>
+                        </div>
+                        <p class="mt-1 text-xs text-gray-600">Use this same webhook endpoint when wiring Twilio inbound WhatsApp to Kynex AI Booking.</p>
+                    </div>
+                </div>
 
                 {{-- Test button --}}
+                @if($managedByAdmin)
                 <div x-data="{ loading: false, result: null }">
                     <button type="button"
                             @click="
@@ -98,6 +161,7 @@
                         </span>
                     </template>
                 </div>
+                @endif
             </div>
         </div>
 
@@ -118,6 +182,7 @@
                 <label class="flex items-center cursor-pointer">
                     <div class="relative">
                         <input type="checkbox" name="messenger[enabled]" value="1" x-model="enabled"
+                               @if(!$managedByAdmin) disabled @endif
                                {{ $channelConfig['messenger']['enabled'] ?? false ? 'checked' : '' }}
                                class="sr-only">
                         <div :class="enabled ? 'bg-indigo-600' : 'bg-gray-700'"
@@ -132,6 +197,7 @@
                 <div>
                     <label class="block text-xs text-gray-500 mb-1">Page ID</label>
                     <input type="text" name="messenger[page_id]"
+                           @if(!$managedByAdmin) disabled @endif
                            value="{{ old('messenger.page_id', $channelConfig['messenger']['page_id'] ?? '') }}"
                            class="w-full bg-gray-800 border border-gray-700 text-gray-100 text-sm rounded-lg px-3 py-2
                                   focus:ring-indigo-500 focus:border-indigo-500">
@@ -139,6 +205,7 @@
                 <div>
                     <label class="block text-xs text-gray-500 mb-1">Access Token</label>
                     <input type="password" name="messenger[access_token]"
+                           @if(!$managedByAdmin) disabled @endif
                            value="{{ old('messenger.access_token', $channelConfig['messenger']['access_token'] ?? '') }}"
                            class="w-full bg-gray-800 border border-gray-700 text-gray-100 text-sm rounded-lg px-3 py-2
                                   focus:ring-indigo-500 focus:border-indigo-500">
@@ -146,6 +213,7 @@
                 <div>
                     <label class="block text-xs text-gray-500 mb-1">Verify Token</label>
                     <input type="text" name="messenger[verify_token]"
+                           @if(!$managedByAdmin) disabled @endif
                            value="{{ old('messenger.verify_token', $channelConfig['messenger']['verify_token'] ?? '') }}"
                            class="w-full bg-gray-800 border border-gray-700 text-gray-100 text-sm rounded-lg px-3 py-2
                                   focus:ring-indigo-500 focus:border-indigo-500">
@@ -153,6 +221,7 @@
                 <div>
                     <label class="block text-xs text-gray-500 mb-1">App Secret</label>
                     <input type="password" name="messenger[app_secret]"
+                           @if(!$managedByAdmin) disabled @endif
                            value="{{ old('messenger.app_secret', $channelConfig['messenger']['app_secret'] ?? '') }}"
                            class="w-full bg-gray-800 border border-gray-700 text-gray-100 text-sm rounded-lg px-3 py-2
                                   focus:ring-indigo-500 focus:border-indigo-500">
@@ -172,6 +241,7 @@
                     </div>
                 </div>
 
+                @if($managedByAdmin)
                 <div x-data="{ loading: false, result: null }">
                     <button type="button"
                             @click="
@@ -191,15 +261,18 @@
                               x-text="result.message"></span>
                     </template>
                 </div>
+                @endif
             </div>
         </div>
 
+        @if($managedByAdmin)
         <div class="flex justify-end">
             <button type="submit"
                     class="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded-lg transition-colors">
                 Save Channel Settings
             </button>
         </div>
+        @endif
     </form>
 </div>
 

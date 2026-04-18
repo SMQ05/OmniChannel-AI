@@ -1,6 +1,11 @@
 <x-layouts.app title="AI Training">
 
 <div class="max-w-4xl mx-auto">
+    @if(!$managedByAdmin)
+        <div class="mb-6 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-5 py-4 text-sm text-amber-200">
+            AI training and provider setup are managed by Kynex Solutions. This page is read-only for the clinic team.
+        </div>
+    @endif
 
     <form method="POST" action="{{ route('settings.ai.update') }}"
           x-data="{
@@ -29,9 +34,14 @@
               }
           }"
           x-ref="form"
+          @if($managedByAdmin)
           @input.debounce.250ms="fetchPreview()"
           @change="fetchPreview()"
-          x-init="fetchPreview()">
+          x-init="fetchPreview()"
+          @else
+          x-init="previewText = @js($compiledPrompt)"
+          @endif
+          >
         @csrf
 
         <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
@@ -39,7 +49,7 @@
             {{-- ============================================================
                  SETTINGS PANEL
                  ============================================================ --}}
-            <div class="space-y-5">
+            <div class="space-y-5 {{ !$managedByAdmin ? 'pointer-events-none opacity-80' : '' }}">
 
                 {{-- Identity --}}
                 <div class="rounded-2xl bg-gray-900/60 backdrop-blur border border-gray-800 p-5 space-y-4">
@@ -103,8 +113,10 @@
                      }">
                     <div class="flex items-center justify-between mb-3">
                         <h2 class="text-sm font-semibold text-white">Services</h2>
+                        @if($managedByAdmin)
                         <button type="button" @click="add()"
                                 class="text-xs text-indigo-400 hover:text-indigo-300">+ Add service</button>
+                        @endif
                     </div>
 
                     <p class="mb-3 text-xs text-gray-500">Duration is in minutes. Price is your customer-facing amount for that service.</p>
@@ -131,6 +143,7 @@
                                        class="col-span-3 bg-gray-800 border border-gray-700 text-gray-100 text-xs rounded-lg px-2 py-1.5
                                               focus:ring-indigo-500 focus:border-indigo-500">
                                 <button type="button" @click="remove(i)"
+                                        @if(!$managedByAdmin) disabled @endif
                                         class="col-span-1 text-gray-600 hover:text-red-400 transition-colors text-center">✕</button>
                             </div>
                         </template>
@@ -149,8 +162,10 @@
                      }">
                     <div class="flex items-center justify-between mb-3">
                         <h2 class="text-sm font-semibold text-white">FAQs</h2>
+                        @if($managedByAdmin)
                         <button type="button" @click="add()"
                                 class="text-xs text-indigo-400 hover:text-indigo-300">+ Add FAQ</button>
+                        @endif
                     </div>
 
                     <div class="space-y-3">
@@ -162,6 +177,7 @@
                                            class="flex-1 bg-gray-800 border border-gray-700 text-gray-100 text-xs rounded-lg px-2 py-1.5
                                                   focus:ring-indigo-500 focus:border-indigo-500">
                                     <button type="button" @click="remove(i)"
+                                            @if(!$managedByAdmin) disabled @endif
                                             class="text-gray-600 hover:text-red-400 transition-colors">✕</button>
                                 </div>
                                 <textarea :name="'faqs[' + i + '][a]'"
@@ -176,12 +192,14 @@
                     </div>
                 </div>
 
+                @if($managedByAdmin)
                 <div class="flex justify-end">
                     <button type="submit"
                             class="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded-lg transition-colors">
                         Save AI Configuration
                     </button>
                 </div>
+                @endif
             </div>
 
             {{-- ============================================================

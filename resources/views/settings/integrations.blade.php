@@ -1,6 +1,13 @@
 <x-layouts.app title="Integrations">
 
 <div class="max-w-2xl mx-auto space-y-6">
+    @if(!$managedByAdmin)
+        <div class="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-5 py-4 text-sm text-amber-200">
+            Google integrations are managed by Kynex Solutions. This page is read-only for the clinic team.
+        </div>
+    @endif
+
+    <div class="{{ !$managedByAdmin ? 'pointer-events-none opacity-80' : '' }} space-y-6">
 
     {{-- =====================================================================
          GOOGLE OAUTH CREDENTIALS (shared by Calendar + Sheets)
@@ -36,6 +43,7 @@
                 <div>
                     <label class="block text-xs text-gray-500 mb-1">Client ID</label>
                     <input type="text" name="google_credentials[client_id]"
+                           @if(!$managedByAdmin) disabled @endif
                            value="{{ old('google_credentials.client_id', $integrationConfig['google_credentials']['client_id'] ?? '') }}"
                            placeholder="123456789-abc…apps.googleusercontent.com"
                            class="w-full bg-gray-800 border border-gray-700 text-gray-100 text-sm rounded-lg px-3 py-2
@@ -44,6 +52,7 @@
                 <div>
                     <label class="block text-xs text-gray-500 mb-1">Client Secret</label>
                     <input type="password" name="google_credentials[client_secret]"
+                           @if(!$managedByAdmin) disabled @endif
                            value="{{ old('google_credentials.client_secret', $integrationConfig['google_credentials']['client_secret'] ?? '') }}"
                            placeholder="GOCSPX-…"
                            autocomplete="off"
@@ -58,12 +67,14 @@
             <input type="hidden" name="google_sheets[enabled]"
                    value="{{ $integrationConfig['google_sheets']['enabled'] ?? 0 ? 1 : 0 }}">
 
+            @if($managedByAdmin)
             <div class="flex justify-end">
                 <button type="submit"
                         class="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded-lg transition-colors">
                     Save Credentials
                 </button>
             </div>
+            @endif
         </form>
     </div>
 
@@ -93,7 +104,7 @@
 
             <label class="flex items-center cursor-pointer">
                 <div class="relative">
-                    <input type="checkbox" x-model="enabled" class="sr-only">
+                    <input type="checkbox" x-model="enabled" class="sr-only" @if(!$managedByAdmin) disabled @endif>
                     <div :class="enabled ? 'bg-indigo-600' : 'bg-gray-700'" class="w-10 h-5 rounded-full transition-colors"></div>
                     <div :class="enabled ? 'translate-x-5' : 'translate-x-0'"
                          class="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform"></div>
@@ -113,6 +124,7 @@
                         @endif
                     </label>
                     <input type="text" name="google_calendar[calendar_id]"
+                           @if(!$managedByAdmin) disabled @endif
                            value="{{ old('google_calendar.calendar_id', $integrationConfig['google_calendar']['calendar_id'] ?? '') }}"
                            placeholder="primary  or  your-calendar@group.calendar.google.com"
                            class="w-full bg-gray-800 border {{ (empty($integrationConfig['google_calendar']['calendar_id']) && !empty($integrationConfig['google_calendar']['token']['access_token'])) ? 'border-yellow-500/60' : 'border-gray-700' }} text-gray-100 text-sm rounded-lg px-3 py-2
@@ -122,16 +134,18 @@
                         Use <span class="font-mono">primary</span> for your main calendar.
                     </p>
                 </div>
+                @if($managedByAdmin)
                 <button type="submit" form="calendar-form"
                         class="mt-3 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm rounded-lg transition-colors">
                     Save
                 </button>
+                @endif
             </form>
 
             {{-- OAuth connect --}}
             @php $hasCredentials = !empty($integrationConfig['google_credentials']['client_id']); @endphp
             <div class="pt-3 border-t border-gray-800 flex items-center gap-3">
-                @if($hasCredentials)
+                @if($hasCredentials && $managedByAdmin)
                     <a href="{{ route('settings.integrations.oauth.redirect', 'google_calendar') }}"
                        class="flex items-center gap-2 px-4 py-2 bg-white/10 hover:bg-white/20 text-white text-sm rounded-lg transition-colors border border-gray-700">
                         <svg class="w-4 h-4" viewBox="0 0 24 24">
@@ -148,6 +162,7 @@
             </div>
 
             {{-- Test --}}
+            @if($managedByAdmin)
             <div x-data="{ loading: false, result: null }" class="flex items-center gap-3">
                 <button type="button"
                         @click="
@@ -166,6 +181,7 @@
                           x-text="result.message"></span>
                 </template>
             </div>
+            @endif
         </div>
     </div>
 
@@ -195,7 +211,7 @@
 
             <label class="flex items-center cursor-pointer">
                 <div class="relative">
-                    <input type="checkbox" x-model="enabled" class="sr-only">
+                    <input type="checkbox" x-model="enabled" class="sr-only" @if(!$managedByAdmin) disabled @endif>
                     <div :class="enabled ? 'bg-indigo-600' : 'bg-gray-700'" class="w-10 h-5 rounded-full transition-colors"></div>
                     <div :class="enabled ? 'translate-x-5' : 'translate-x-0'"
                          class="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform"></div>
@@ -216,6 +232,7 @@
                             @endif
                         </label>
                         <input type="text" name="google_sheets[spreadsheet_id]"
+                               @if(!$managedByAdmin) disabled @endif
                                value="{{ old('google_sheets.spreadsheet_id', $integrationConfig['google_sheets']['spreadsheet_id'] ?? '') }}"
                                placeholder="From spreadsheet URL: /d/{SPREADSHEET_ID}/edit"
                                class="w-full bg-gray-800 border {{ (empty($integrationConfig['google_sheets']['spreadsheet_id']) && !empty($integrationConfig['google_sheets']['token']['access_token'])) ? 'border-yellow-500/60' : 'border-gray-700' }} text-gray-100 text-sm rounded-lg px-3 py-2
@@ -227,20 +244,23 @@
                     <div>
                         <label class="block text-xs text-gray-500 mb-1">Sheet Tab Name</label>
                         <input type="text" name="google_sheets[sheet_name]"
+                               @if(!$managedByAdmin) disabled @endif
                                value="{{ old('google_sheets.sheet_name', $integrationConfig['google_sheets']['sheet_name'] ?? 'Appointments') }}"
                                class="w-full bg-gray-800 border border-gray-700 text-gray-100 text-sm rounded-lg px-3 py-2
                                       focus:ring-indigo-500 focus:border-indigo-500">
                         <p class="text-xs text-gray-600 mt-1">The tab name at the bottom of the sheet (e.g. Sheet1).</p>
                     </div>
                 </div>
+                @if($managedByAdmin)
                 <button type="submit" form="sheets-form"
                         class="mt-3 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm rounded-lg transition-colors">
                     Save
                 </button>
+                @endif
             </form>
 
             <div class="pt-3 border-t border-gray-800 flex items-center gap-3">
-                @if(!empty($integrationConfig['google_credentials']['client_id']))
+                @if(!empty($integrationConfig['google_credentials']['client_id']) && $managedByAdmin)
                     <a href="{{ route('settings.integrations.oauth.redirect', 'google_sheets') }}"
                        class="flex items-center gap-2 px-4 py-2 bg-white/10 hover:bg-white/20 text-white text-sm rounded-lg transition-colors border border-gray-700">
                         <svg class="w-4 h-4" viewBox="0 0 24 24">
@@ -256,6 +276,7 @@
                 @endif
             </div>
 
+            @if($managedByAdmin)
             <div x-data="{ loading: false, result: null }" class="flex items-center gap-3">
                 <button type="button"
                         @click="
@@ -277,9 +298,11 @@
                     <p class="text-xs text-gray-600">Note: test appends a row labelled "TEST - PLEASE DELETE".</p>
                 @endif
             </div>
+            @endif
         </div>
     </div>
 
+    </div>
 </div>
 
 </x-layouts.app>

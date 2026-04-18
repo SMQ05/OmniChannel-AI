@@ -7,6 +7,7 @@ namespace App\Http\Controllers\Settings;
 use App\Http\Controllers\Controller;
 use App\Services\Google\GoogleCalendarService;
 use App\Services\Google\GoogleSheetsService;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -48,6 +49,7 @@ class IntegrationSettingsController extends Controller
         return view('settings.integrations', [
             'business'          => $business,
             'integrationConfig' => $integrationConfig,
+            'managedByAdmin' => $this->managedByAdmin($request),
         ]);
     }
 
@@ -59,6 +61,8 @@ class IntegrationSettingsController extends Controller
      */
     public function update(Request $request): RedirectResponse
     {
+        $this->ensureManagedByAdmin($request);
+
         $validated = $request->validate([
             'google_credentials.client_id'     => ['nullable', 'string', 'max:500'],
             'google_credentials.client_secret' => ['nullable', 'string', 'max:500'],
@@ -104,6 +108,8 @@ class IntegrationSettingsController extends Controller
      */
     public function oauthRedirect(Request $request, string $service): RedirectResponse
     {
+        $this->ensureManagedByAdmin($request);
+
         abort_if(!in_array($service, ['google_calendar', 'google_sheets'], true), 400);
 
         $business    = $request->user()->business;
@@ -143,6 +149,8 @@ class IntegrationSettingsController extends Controller
      */
     public function oauthCallback(Request $request): RedirectResponse
     {
+        $this->ensureManagedByAdmin($request);
+
         $service    = $request->session()->pull('oauth_service');
         $businessId = $request->session()->pull('oauth_business_id');
         $code       = $request->input('code', '');
@@ -223,6 +231,8 @@ class IntegrationSettingsController extends Controller
         GoogleCalendarService $calendar,
         GoogleSheetsService $sheets,
     ): JsonResponse {
+        $this->ensureManagedByAdmin($request);
+
         $business = $request->user()->business;
 
         try {
@@ -299,5 +309,17 @@ class IntegrationSettingsController extends Controller
         $fakeAppointment->setRelation('provider', new \App\Models\Provider(['name' => 'TEST']));
 
         $sheets->appendRow($business, $fakeAppointment);
+    }
+
+    private function managedByAdmin(Request $request): bool
+    {
+        return $request->session()->has('impersonating_as') || $request->user()?->role === 'super_admin';
+    }
+
+    private function ensureManagedByAdmin(Request $request): void
+    {
+        if (!$this->managedByAdmin($request)) {
+            throw new AuthorizationException('Integrations are managed by Kynex Solutions.');
+        }
     }
 }
