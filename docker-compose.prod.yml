@@ -26,6 +26,21 @@ services:
     networks:
       - coolify
 
+  redis:
+    image: redis:7-alpine
+    init: true
+    restart: unless-stopped
+    command:
+      - redis-server
+      - --save
+      - ""
+      - --appendonly
+      - "no"
+    expose:
+      - "6379"
+    networks:
+      - coolify
+
   worker:
     build:
       context: .
@@ -51,6 +66,25 @@ services:
     stop_grace_period: 70s
     command:
       - /usr/local/bin/start-scheduler
+    networks:
+      - coolify
+
+  voice-gateway:
+    build:
+      context: ./services/voice-gateway
+      dockerfile: Dockerfile
+    init: true
+    restart: unless-stopped
+    depends_on:
+      - nginx
+      - redis
+    environment:
+      PORT: 3001
+      HOST: 0.0.0.0
+      LARAVEL_INTERNAL_BASE_URL: http://nginx
+      REDIS_URL: redis://redis:6379/0
+    expose:
+      - "3001"
     networks:
       - coolify
 

@@ -22,6 +22,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'super_admin'      => \App\Http\Middleware\RequireSuperAdmin::class,
             'require_business' => \App\Http\Middleware\RequireBusiness::class,
+            'voice_gateway'    => \App\Http\Middleware\VerifyVoiceGatewayRequest::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

@@ -142,6 +142,11 @@ class Business extends Model
         return $this->hasMany(VoiceChannel::class);
     }
 
+    public function voiceSessions(): HasMany
+    {
+        return $this->hasMany(VoiceSession::class);
+    }
+
     public function subscription(): HasOne
     {
         return $this->hasOne(BusinessSubscription::class);

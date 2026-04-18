@@ -37,4 +37,9 @@ class VoiceChannel extends Model
     {
         return $this->hasMany(CallLog::class);
     }
+
+    public function voiceSessions(): HasMany
+    {
+        return $this->hasMany(VoiceSession::class);
+    }
 }
