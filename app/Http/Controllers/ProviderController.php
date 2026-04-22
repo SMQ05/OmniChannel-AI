@@ -29,7 +29,7 @@ class ProviderController extends Controller
     public function index(Request $request): View
     {
         $providers = Provider::query()
-            ->withCount('appointments')
+            ->withCount(['appointments', 'services'])
             ->orderBy('name')
             ->get();
 
@@ -72,7 +72,7 @@ class ProviderController extends Controller
      */
     public function show(Request $request, Provider $provider): View
     {
-        $provider->loadMissing(['blockedDates']);
+        $provider->loadMissing(['blockedDates', 'services']);
 
         return view('providers.show', [
             'provider' => $provider,

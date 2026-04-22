@@ -4,18 +4,18 @@
 <form method="GET" action="{{ route('conversations.index') }}" class="flex flex-wrap gap-2 mb-6">
     <input type="text" name="search" value="{{ $filters['search'] ?? '' }}"
            placeholder="Search by patient name…"
-           class="flex-1 min-w-48 bg-gray-800 border border-gray-700 text-gray-300 text-sm rounded-lg px-3 py-2
+           class="flex-1 min-w-48 field
                   placeholder-gray-600 focus:ring-indigo-500 focus:border-indigo-500">
 
     <select name="channel"
-            class="bg-gray-800 border border-gray-700 text-gray-300 text-sm rounded-lg px-3 py-2">
+            class="field">
         <option value="">All Channels</option>
         <option value="whatsapp"  {{ ($filters['channel'] ?? '') === 'whatsapp'  ? 'selected' : '' }}>WhatsApp</option>
         <option value="messenger" {{ ($filters['channel'] ?? '') === 'messenger' ? 'selected' : '' }}>Messenger</option>
     </select>
 
     <input type="date" name="date" value="{{ $filters['date'] ?? '' }}"
-           class="bg-gray-800 border border-gray-700 text-gray-300 text-sm rounded-lg px-3 py-2">
+           class="field">
 
     <label class="flex items-center gap-2 px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-gray-400 cursor-pointer">
         <input type="checkbox" name="handoff_only" value="1"
@@ -25,13 +25,13 @@
     </label>
 
     <button type="submit"
-            class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded-lg transition-colors">
+            class="px-4 py-2 btn-primary">
         Filter
     </button>
 </form>
 
 {{-- Conversation list --}}
-<div class="rounded-2xl bg-gray-900/60 backdrop-blur border border-gray-800 overflow-hidden">
+<div class="panel overflow-hidden">
     <div class="divide-y divide-gray-800">
         @forelse($logs as $log)
             @php

@@ -128,4 +128,57 @@ class AdminBusinessControlsTest extends TestCase
 
         $this->assertTrue(Hash::check('new-secure-password', $owner->fresh()->password));
     }
+
+    public function test_super_admin_can_disconnect_messaging_connection_and_audit_it(): void
+    {
+        $business = Business::query()->create([
+            'name' => 'Clinic',
+            'business_type' => 'clinic',
+            'slug' => 'clinic',
+            'timezone' => 'UTC',
+            'locale' => 'en',
+            'channel_config' => [],
+            'integration_config' => [],
+            'reminder_settings' => [],
+            'ai_config' => [],
+            'is_active' => true,
+            'plan' => 'trial',
+        ]);
+
+        \App\Models\MessagingChannelConnection::query()->create([
+            'business_id' => $business->id,
+            'channel' => 'whatsapp',
+            'provider' => 'meta_cloud',
+            'status' => 'connected',
+            'credentials' => ['access_token' => 'token', 'verify_token' => 'verify', 'app_secret' => 'secret'],
+            'runtime_config' => ['phone_number_id' => 'pnid-1'],
+            'connected_at' => now(),
+        ]);
+
+        $admin = User::query()->create([
+            'business_id' => null,
+            'name' => 'Admin',
+            'email' => 'admin2@example.com',
+            'password' => bcrypt('password'),
+            'role' => 'super_admin',
+        ]);
+
+        $this->actingAs($admin)
+            ->patch(route('admin.businesses.messaging.disconnect', [$business, 'whatsapp']), [
+                'confirm_disconnect' => '1',
+                'disconnect_reason' => 'Provider rotated',
+            ])
+            ->assertRedirect(route('admin.businesses.index'));
+
+        $this->assertDatabaseHas('messaging_channel_connections', [
+            'business_id' => $business->id,
+            'channel' => 'whatsapp',
+            'status' => 'disconnected',
+            'disconnect_reason' => 'Provider rotated',
+        ]);
+        $this->assertDatabaseHas('audit_logs', [
+            'business_id' => $business->id,
+            'action' => 'messaging.connection_disconnected',
+        ]);
+    }
 }

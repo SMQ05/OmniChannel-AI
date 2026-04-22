@@ -6,6 +6,7 @@ namespace App\Ai\Agents;
 
 use App\Models\Business;
 use App\Models\ConversationLog;
+use App\Services\Operations\BusinessServiceCatalog;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -44,6 +45,7 @@ use Laravel\Ai\Facades\Ai;
  * @phpstan-type AgentResponse array{
  *     intent:       string,
  *     provider_id:  int|null,
+ *     service_id:   int|null,
  *     date:         string|null,
  *     time:         string|null,
  *     service_type: string|null,
@@ -62,6 +64,11 @@ use Laravel\Ai\Facades\Ai;
  */
 class AppointmentAgent
 {
+    public function __construct(
+        private readonly ?BusinessServiceCatalog $businessServiceCatalog = null,
+    ) {
+    }
+
     /** Valid intent values the LLM is permitted to return. */
     private const VALID_INTENTS = ['book', 'cancel', 'reschedule', 'faq', 'handoff'];
 
@@ -159,7 +166,7 @@ class AppointmentAgent
         $persona     = $config['persona']  ?? '';
         $tone        = $config['tone']     ?? 'friendly';
         $language    = $config['language'] ?? 'English';
-        $services    = $config['services'] ?? [];
+        $services    = ($this->businessServiceCatalog ?? app(BusinessServiceCatalog::class))->promptCatalog($business);
         $faqs        = $config['faqs']     ?? [];
 
         return implode("\n\n", array_filter([
@@ -272,9 +279,10 @@ class AppointmentAgent
     }
 
     /**
-     * Build the services section from ai_config.services.
+     * Build the services section from structured services when available,
+     * falling back to legacy ai_config.services without changing behavior.
      *
-     * @param  list<array{name: string, duration_min: int, price?: int|float}>  $services
+     * @param  list<array{name: string, duration_min: int, price?: int|float, id?: int}>  $services
      */
     private function sectionServices(array $services): string
     {
@@ -288,7 +296,8 @@ class AppointmentAgent
             $name     = $service['name']         ?? 'Service';
             $duration = $service['duration_min'] ?? 30;
             $price    = isset($service['price']) ? ' — ' . number_format((float) $service['price'], 0) : '';
-            $lines[]  = "- {$name} ({$duration} min{$price})";
+            $identifier = isset($service['id']) ? "[ID {$service['id']}] " : '';
+            $lines[]  = "- {$identifier}{$name} ({$duration} min{$price})";
         }
 
         return "SERVICES OFFERED:\n" . implode("\n", $lines);
@@ -330,8 +339,9 @@ class AppointmentAgent
             '1. NEVER invent slots. Only use slots from AVAILABLE SLOTS above.',
             '2. If needs_human is true, stop handling and escalate immediately.',
             '3. Collect: patient name, preferred date/time, service type, and provider (if preference given).',
-            '4. ALWAYS reply ONLY with valid raw JSON. No markdown. No preamble. No explanation outside JSON.',
-            '5. Dates and times in your JSON response must use the local business timezone, not UTC.',
+            '4. If a service has a listed ID, return that same value in service_id whenever you can identify the requested service.',
+            '5. ALWAYS reply ONLY with valid raw JSON. No markdown. No preamble. No explanation outside JSON.',
+            '6. Dates and times in your JSON response must use the local business timezone, not UTC.',
         ]);
     }
 
@@ -345,6 +355,7 @@ class AppointmentAgent
         {
           "intent":       "book|cancel|reschedule|faq|handoff",
           "provider_id":  null or integer,
+          "service_id":   null or integer,
           "date":         null or "YYYY-MM-DD",
           "time":         null or "HH:MM",
           "service_type": null or string,
@@ -401,6 +412,7 @@ class AppointmentAgent
         return [
             'intent'       => $intent,
             'provider_id'  => isset($data['provider_id']) ? (int) $data['provider_id'] : null,
+            'service_id'   => isset($data['service_id']) ? (int) $data['service_id'] : null,
             'date'         => isset($data['date'])         ? (string) $data['date']     : null,
             'time'         => isset($data['time'])         ? (string) $data['time']     : null,
             'service_type' => isset($data['service_type']) ? (string) $data['service_type'] : null,
@@ -448,6 +460,7 @@ class AppointmentAgent
         return [
             'intent'       => 'faq',
             'provider_id'  => null,
+            'service_id'   => null,
             'date'         => null,
             'time'         => null,
             'service_type' => null,

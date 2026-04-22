@@ -6,8 +6,11 @@ namespace Tests\Feature;
 
 use App\Ai\Agents\AppointmentAgent;
 use App\Jobs\ProcessIncomingMessage;
+use App\Models\BusinessService;
 use App\Models\Business;
+use App\Models\BusinessSubscription;
 use App\Models\InboundWebhook;
+use App\Models\Plan;
 use App\Models\Provider;
 use App\Services\AppointmentOrchestrator;
 use App\Services\SlotCalculatorService;
@@ -74,7 +77,7 @@ class ProcessIncomingMessageTest extends TestCase
         ]);
 
         $this->app->instance(SlotCalculatorService::class, new class extends SlotCalculatorService {
-            public function compute(\Illuminate\Support\Collection $providers, string $timezone, int $days = 7): array
+            public function compute(\Illuminate\Support\Collection $providers, string $timezone, int $days = 7, ?BusinessService $service = null): array
             {
                 return [];
             }
@@ -115,6 +118,95 @@ class ProcessIncomingMessageTest extends TestCase
             'status' => 'sent',
         ]);
         $this->assertDatabaseHas('conversation_logs', [
+            'business_id' => $business->id,
+            'channel' => 'whatsapp',
+        ]);
+    }
+
+    public function test_inbound_job_records_message_but_blocks_reply_when_billing_is_suspended(): void
+    {
+        $plan = Plan::query()->firstOrCreate(
+            ['code' => 'trial'],
+            [
+                'name' => 'Trial',
+                'included_quotas' => ['messages_sent' => 100],
+                'feature_flags' => ['voice_agent' => false],
+                'is_active' => true,
+            ],
+        );
+
+        $business = Business::query()->create([
+            'name' => 'Clinic',
+            'business_type' => 'clinic',
+            'slug' => 'clinic',
+            'timezone' => 'UTC',
+            'locale' => 'en',
+            'channel_config' => [
+                'whatsapp' => [
+                    'enabled' => true,
+                    'phone_number_id' => '123456',
+                    'access_token' => 'token',
+                    'verify_token' => 'verify-token',
+                    'app_secret' => 'meta-app-secret',
+                ],
+            ],
+            'integration_config' => [],
+            'reminder_settings' => [],
+            'ai_config' => ['llm_provider' => 'claude', 'business_phone' => '15550001111'],
+            'is_active' => true,
+            'plan' => 'trial',
+        ]);
+
+        BusinessSubscription::query()->create([
+            'business_id' => $business->id,
+            'plan_id' => $plan->id,
+            'status' => 'trial',
+            'lifecycle_status' => 'suspended',
+            'warn_at_ratio' => 0.8,
+            'enforce_limits' => false,
+            'admin_override' => false,
+            'current_period_start' => now()->startOfMonth(),
+            'current_period_end' => now()->endOfMonth(),
+        ]);
+
+        Provider::query()->create([
+            'business_id' => $business->id,
+            'name' => 'Dr Test',
+            'working_hours' => ['monday' => ['active' => true, 'start' => '09:00', 'end' => '17:00']],
+            'slot_duration_minutes' => 30,
+            'is_active' => true,
+        ]);
+
+        $webhook = InboundWebhook::query()->create([
+            'business_id' => $business->id,
+            'channel' => 'whatsapp',
+            'business_slug' => $business->slug,
+            'correlation_id' => (string) \Illuminate\Support\Str::uuid(),
+            'idempotency_key' => sha1('billing-suspended'),
+            'external_message_id' => 'wamid.test.blocked',
+            'sender_platform_id' => '15551234567',
+            'sender_name' => 'Patient',
+            'message_text' => 'hello',
+            'message_type' => 'text',
+            'payload' => ['example' => true],
+            'normalized_payload' => ['text' => 'hello'],
+            'signature_valid' => true,
+            'status' => 'received',
+            'received_at' => now(),
+        ]);
+
+        $job = new ProcessIncomingMessage($webhook->id);
+        $this->app->call([$job, 'handle']);
+
+        $this->assertDatabaseHas('inbound_webhooks', [
+            'id' => $webhook->id,
+            'status' => 'blocked',
+        ]);
+        $this->assertDatabaseHas('conversation_logs', [
+            'business_id' => $business->id,
+            'channel' => 'whatsapp',
+        ]);
+        $this->assertDatabaseMissing('outbound_message_attempts', [
             'business_id' => $business->id,
             'channel' => 'whatsapp',
         ]);

@@ -6,11 +6,13 @@ namespace App\Services\Voice;
 
 use App\Models\Appointment;
 use App\Models\Business;
+use App\Models\BusinessService;
 use App\Models\Patient;
 use App\Models\Provider;
 use App\Models\VoiceEvent;
 use App\Models\VoiceSession;
 use App\Services\Messaging\OutboundMessageService;
+use App\Services\Operations\BusinessServiceCatalog;
 use App\Services\SlotCalculatorService;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
@@ -21,6 +23,7 @@ class VoiceToolService
     public function __construct(
         private readonly SlotCalculatorService $slotCalculatorService,
         private readonly OutboundMessageService $outboundMessageService,
+        private readonly BusinessServiceCatalog $businessServiceCatalog,
     ) {}
 
     /**
@@ -55,11 +58,13 @@ class VoiceToolService
         $business = $voiceSession->business;
         $days = max(1, min(7, (int) ($payload['days'] ?? 3)));
         $providerId = isset($payload['provider_id']) ? (int) $payload['provider_id'] : null;
+        $service = $this->resolveService($business, null, $payload);
 
         $query = Provider::withoutGlobalScope(\App\Models\Concerns\TenantScope::class)
             ->where('business_id', $business->id)
             ->where('is_active', true)
             ->with([
+                'services:id',
                 'blockedDates',
                 'appointments' => function ($appointments): void {
                     $appointments
@@ -81,6 +86,7 @@ class VoiceToolService
             providers: $providers,
             timezone: $business->timezone,
             days: $days,
+            service: $service,
         );
 
         return [
@@ -99,9 +105,14 @@ class VoiceToolService
         $business = $voiceSession->business;
         $provider = $this->resolveProvider($business, (int) ($payload['provider_id'] ?? 0));
         $patient = $this->resolvePatient($voiceSession, $payload);
+        $service = $this->resolveService($business, $provider, $payload);
 
         if ($provider === null || $patient === null) {
             return ['ok' => false, 'error' => 'Provider or patient could not be resolved.'];
+        }
+
+        if (($payload['service_id'] ?? null) !== null && $service === null) {
+            return ['ok' => false, 'error' => 'The selected service is not available for that provider.'];
         }
 
         [$startUtc, $endUtc] = $this->buildUtcWindow(
@@ -109,6 +120,7 @@ class VoiceToolService
             $provider,
             (string) ($payload['date'] ?? ''),
             (string) ($payload['time'] ?? ''),
+            $service,
         );
 
         if ($startUtc === null || $endUtc === null) {
@@ -134,7 +146,8 @@ class VoiceToolService
                     'business_id' => $business->id,
                     'provider_id' => $provider->id,
                     'patient_id' => $patient->id,
-                    'service_type' => (string) ($payload['service_type'] ?? 'Appointment'),
+                    'service_id' => $service?->id,
+                    'service_type' => $service?->name ?? (string) ($payload['service_type'] ?? 'Appointment'),
                     'start_time' => $startUtc,
                     'end_time' => $endUtc,
                     'status' => 'confirmed',
@@ -174,6 +187,7 @@ class VoiceToolService
         $booked = $this->bookAppointment($voiceSession, array_merge($payload, [
             'patient_id' => $current->patient_id,
             'provider_id' => $payload['provider_id'] ?? $current->provider_id,
+            'service_id' => $payload['service_id'] ?? $current->service_id,
             'service_type' => $payload['service_type'] ?? $current->service_type,
         ]));
 
@@ -398,6 +412,7 @@ class VoiceToolService
         return Provider::withoutGlobalScope(\App\Models\Concerns\TenantScope::class)
             ->where('business_id', $business->id)
             ->where('id', $providerId)
+            ->with('services:id')
             ->first();
     }
 
@@ -431,16 +446,36 @@ class VoiceToolService
     /**
      * @return array{0: ?Carbon, 1: ?Carbon}
      */
-    private function buildUtcWindow(Business $business, Provider $provider, string $date, string $time): array
+    private function buildUtcWindow(Business $business, Provider $provider, string $date, string $time, ?BusinessService $service = null): array
     {
         if ($date === '' || $time === '') {
             return [null, null];
         }
 
         $start = Carbon::parse(sprintf('%s %s', $date, $time), $business->timezone)->utc();
-        $end = $start->copy()->addMinutes($provider->slot_duration_minutes);
+        $end = $start->copy()->addMinutes($service?->duration_minutes ?? $provider->slot_duration_minutes);
 
         return [$start, $end];
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function resolveService(Business $business, ?Provider $provider, array $payload): ?BusinessService
+    {
+        $service = $this->businessServiceCatalog->resolveForBusiness(
+            business: $business,
+            serviceId: isset($payload['service_id']) ? (int) $payload['service_id'] : null,
+            serviceType: isset($payload['service_type']) ? (string) $payload['service_type'] : null,
+        );
+
+        if ($service === null || $provider === null) {
+            return $service;
+        }
+
+        return $this->businessServiceCatalog->providerCanDeliver($provider, $service)
+            ? $service
+            : null;
     }
 
     /**

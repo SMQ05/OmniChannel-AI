@@ -6,6 +6,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Jobs\ProcessIncomingMessage;
 use App\Models\Business;
+use App\Services\ChannelReadinessService;
 use App\Services\Messaging\InboundMessageNormalizer;
 use App\Services\Messaging\InboundWebhookRecorder;
 use App\Services\Usage\UsageMeteringService;
@@ -20,15 +21,24 @@ use Throwable;
 
 class WebhookController extends Controller
 {
+    public function __construct(
+        private readonly ChannelReadinessService $channelReadinessService,
+    ) {}
+
     public function verify(Request $request, string $slug, string $channel): Response
     {
         $mode      = $request->query('hub_mode') ?? $request->query('hub.mode');
         $token     = $request->query('hub_verify_token') ?? $request->query('hub.verify_token');
         $challenge = $request->query('hub_challenge') ?? $request->query('hub.challenge');
 
-        $business      = Business::where('slug', $slug)->first();
-        $envKey        = strtoupper($channel) . '_VERIFY_TOKEN';
-        $expectedToken = $business?->channel_config[$channel]['verify_token'] ?: env($envKey);
+        $business = Business::query()
+            ->with(['messagingChannels', 'messagingConnections'])
+            ->where('slug', $slug)
+            ->first();
+        $envKey = strtoupper($channel) . '_VERIFY_TOKEN';
+        $expectedToken = $business !== null
+            ? ($this->channelReadinessService->resolveWebhookConfig($business, $channel)['verify_token'] ?: env($envKey))
+            : env($envKey);
 
         if (
             $mode === 'subscribe'
@@ -58,7 +68,10 @@ class WebhookController extends Controller
         InboundWebhookRecorder $recorder,
         UsageMeteringService $usageMetering,
     ): JsonResponse {
-        $business = Business::where('slug', $slug)->first();
+        $business = Business::query()
+            ->with(['messagingChannels', 'messagingConnections'])
+            ->where('slug', $slug)
+            ->first();
 
         if ($business === null) {
             return response()->json(['error' => 'Business not found.'], 404);
@@ -69,7 +82,9 @@ class WebhookController extends Controller
         }
 
         $rawBody = $request->getContent();
-        $provider = $channel === 'whatsapp' ? (string) ($business->channel_config['whatsapp']['provider'] ?? 'meta_cloud') : null;
+        $provider = $channel === 'whatsapp'
+            ? (string) $this->channelReadinessService->forChannel($business, 'whatsapp')['provider']
+            : null;
         $correlationId = (string) Str::uuid();
 
         Log::withContext([
@@ -188,8 +203,10 @@ class WebhookController extends Controller
 
     private function hasValidSignature(Request $request, Business $business, string $channel, ?string $provider, string $rawBody): bool
     {
+        $webhookConfig = $this->channelReadinessService->resolveWebhookConfig($business, $channel);
+
         if ($channel === 'whatsapp' && $provider === 'twilio') {
-            $authToken = (string) ($business->channel_config['whatsapp']['twilio_auth_token'] ?? '');
+            $authToken = (string) ($webhookConfig['signing_secret'] ?? '');
             $signature = $request->header('X-Twilio-Signature', '');
 
             return $this->isValidTwilioSignature($request, $signature, $authToken);
@@ -197,7 +214,7 @@ class WebhookController extends Controller
 
         $header = $request->header('X-Hub-Signature-256', '');
         $envKey = strtoupper($channel) . '_APP_SECRET';
-        $secret = (string) ($business->channel_config[$channel]['app_secret'] ?? env($envKey, ''));
+        $secret = (string) ($webhookConfig['signing_secret'] ?? env($envKey, ''));
 
         if ($secret === '' || $header === '') {
             return false;

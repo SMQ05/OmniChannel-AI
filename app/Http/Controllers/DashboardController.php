@@ -6,7 +6,9 @@ namespace App\Http\Controllers;
 
 use App\Http\Resources\AppointmentResource;
 use App\Models\Appointment;
+use App\Models\BusinessService;
 use App\Models\ConversationLog;
+use App\Models\Provider;
 use App\Services\Usage\UsageSummaryService;
 use App\Services\Voice\VoiceConfigurationService;
 use Carbon\Carbon;
@@ -44,6 +46,8 @@ class DashboardController extends Controller
             return redirect()->route('admin.dashboard');
         }
 
+        abort_unless($request->user()->canPermission('business.dashboard.view'), 403);
+
         $business = $request->user()->business;
         $timezone = $business->timezone;
         $now      = Carbon::now($timezone);
@@ -53,7 +57,7 @@ class DashboardController extends Controller
         $weekEnd    = $now->copy()->endOfWeek()->utc();
 
         $todayAppointments = Appointment::query()
-            ->with(['patient', 'provider'])
+            ->with(['patient', 'provider', 'service'])
             ->whereBetween('start_time', [$todayStart, $todayEnd])
             ->whereIn('status', ['confirmed', 'completed'])
             ->orderBy('start_time')
@@ -84,6 +88,7 @@ class DashboardController extends Controller
             'usageSummary'        => $usageSummaryService->forBusiness($business),
             'timezone'            => $timezone,
             'voiceState'          => $voiceConfigurationService->forBusiness($business),
+            'operationsOverview'  => $this->buildOperationsOverview($business),
         ]);
     }
 
@@ -102,6 +107,8 @@ class DashboardController extends Controller
             return response()->json(['error' => 'not applicable'], 403);
         }
 
+        abort_unless($request->user()->canPermission('business.dashboard.view'), 403);
+
         $business = $request->user()->business;
         $timezone = $business->timezone;
         $now      = Carbon::now($timezone);
@@ -112,7 +119,7 @@ class DashboardController extends Controller
         $todayEnd   = $now->copy()->endOfDay()->utc();
 
         $todayAppointments = Appointment::query()
-            ->with(['patient', 'provider'])
+            ->with(['patient', 'provider', 'service'])
             ->whereBetween('start_time', [$todayStart, $todayEnd])
             ->whereIn('status', ['confirmed', 'completed'])
             ->orderBy('start_time')
@@ -161,6 +168,47 @@ class DashboardController extends Controller
             'messages_today'    => ConversationLog::query()
                 ->whereDate('created_at', $now->toDateString())
                 ->count(),
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function buildOperationsOverview(\App\Models\Business $business): array
+    {
+        $activeServices = BusinessService::query()
+            ->where('business_id', $business->id)
+            ->where('is_active', true)
+            ->withCount('providers')
+            ->orderBy('sort_order')
+            ->orderBy('name')
+            ->get();
+
+        $providers = Provider::query()
+            ->where('is_active', true)
+            ->withCount('services')
+            ->orderBy('name')
+            ->get();
+
+        $servicesWithoutProviders = $activeServices->filter(fn (BusinessService $service): bool => $service->providers_count === 0);
+        $providersWithoutServices = $providers->filter(fn (Provider $provider): bool => $provider->services_count === 0);
+        $bookingRules = $business->bookingRules();
+
+        return [
+            'active_services_count' => $activeServices->count(),
+            'mapped_providers_count' => $providers->filter(fn (Provider $provider): bool => $provider->services_count > 0)->count(),
+            'services_without_providers_count' => $servicesWithoutProviders->count(),
+            'providers_without_services_count' => $providersWithoutServices->count(),
+            'services_without_providers' => $servicesWithoutProviders->pluck('name')->values()->all(),
+            'providers_without_services' => $providersWithoutServices->pluck('name')->values()->all(),
+            'has_structured_services' => $activeServices->isNotEmpty(),
+            'legacy_services_count' => count($business->ai_config['services'] ?? []),
+            'booking_rules' => [
+                'lead_time_minutes' => (int) ($bookingRules['lead_time_minutes'] ?? 0),
+                'max_advance_days' => (int) ($bookingRules['max_advance_days'] ?? 30),
+                'allow_same_day_booking' => (bool) ($bookingRules['allow_same_day_booking'] ?? true),
+                'require_provider_selection' => (bool) ($bookingRules['require_provider_selection'] ?? false),
+            ],
         ];
     }
 }

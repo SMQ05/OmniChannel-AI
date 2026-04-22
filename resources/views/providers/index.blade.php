@@ -3,7 +3,7 @@
 <div class="flex items-center justify-between mb-6">
     <p class="text-sm text-gray-500">{{ $providers->count() }} provider{{ $providers->count() !== 1 ? 's' : '' }}</p>
     <a href="{{ route('providers.create') }}"
-       class="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded-lg transition-colors">
+       class="flex items-center gap-2 px-4 py-2 btn-primary">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
         </svg>
@@ -13,7 +13,7 @@
 
 <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
     @forelse($providers as $provider)
-        <div class="relative rounded-2xl bg-gray-900/60 backdrop-blur border border-gray-800 overflow-hidden
+        <div class="relative panel overflow-hidden
                     {{ !$provider->is_active ? 'opacity-60' : '' }}">
 
             {{-- Active indicator --}}
@@ -52,6 +52,14 @@
                     <span class="text-xs text-gray-600">{{ $provider->slot_duration_minutes }}min slots</span>
                     <span class="text-xs text-gray-600">{{ $provider->appointments_count ?? 0 }} appointments</span>
                 </div>
+                <div class="mt-2 flex items-center justify-between">
+                    <span class="text-xs {{ ($provider->services_count ?? 0) > 0 ? 'text-emerald-400' : 'text-amber-300' }}">
+                        {{ $provider->services_count ?? 0 }} mapped service{{ ($provider->services_count ?? 0) === 1 ? '' : 's' }}
+                    </span>
+                    @if(($provider->services_count ?? 0) === 0)
+                        <span class="text-xs text-amber-300">Needs mapping</span>
+                    @endif
+                </div>
 
                 {{-- Working days chips --}}
                 <div class="mt-3 flex flex-wrap gap-1">
@@ -70,7 +78,7 @@
 
             <div class="px-5 py-3 border-t border-gray-800">
                 <a href="{{ route('providers.show', $provider) }}"
-                   class="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">
+                   class="text-xs text-[var(--brand)] hover:text-[var(--brand-strong)] transition-colors">
                     Edit provider →
                 </a>
             </div>

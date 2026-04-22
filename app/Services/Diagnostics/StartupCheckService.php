@@ -5,10 +5,15 @@ declare(strict_types=1);
 namespace App\Services\Diagnostics;
 
 use App\Models\Business;
+use App\Services\ChannelReadinessService;
 use Illuminate\Support\Facades\Schema;
 
 class StartupCheckService
 {
+    public function __construct(
+        private readonly ChannelReadinessService $channelReadinessService,
+    ) {}
+
     /**
      * @return list<array{severity: string, title: string, detail: string}>
      */
@@ -65,43 +70,23 @@ class StartupCheckService
     public function businessIssues(Business $business): array
     {
         $issues = [];
-        $channels = $business->channel_config ?? [];
+        $channels = $this->channelReadinessService->forBusiness($business);
         $integrations = $business->integration_config ?? [];
-        $voice = $channels['voice'] ?? [];
-        $whatsAppProvider = (string) ($channels['whatsapp']['provider'] ?? 'meta_cloud');
+        $voice = $business->channel_config['voice'] ?? [];
 
-        if (($channels['whatsapp']['enabled'] ?? false) && $whatsAppProvider === 'meta_cloud' && (
-            empty($channels['whatsapp']['phone_number_id'])
-            || empty($channels['whatsapp']['access_token'])
-            || empty($channels['whatsapp']['app_secret'])
-        )) {
+        if ($channels['whatsapp']['enabled'] && !$channels['whatsapp']['connected']) {
             $issues[] = [
                 'severity' => 'critical',
-                'title' => 'WhatsApp config incomplete',
-                'detail' => 'phone_number_id, access_token, and app_secret are required for WhatsApp send/verify.',
+                'title' => 'WhatsApp connection incomplete',
+                'detail' => 'Business enablement is live, but the admin-managed WhatsApp connection is not ready.',
             ];
         }
 
-        if (($channels['whatsapp']['enabled'] ?? false) && $whatsAppProvider === 'twilio' && (
-            empty($channels['whatsapp']['twilio_account_sid'])
-            || empty($channels['whatsapp']['twilio_auth_token'])
-            || empty($channels['whatsapp']['twilio_from_number'])
-        )) {
+        if ($channels['messenger']['enabled'] && !$channels['messenger']['connected']) {
             $issues[] = [
                 'severity' => 'critical',
-                'title' => 'Twilio WhatsApp config incomplete',
-                'detail' => 'twilio_account_sid, twilio_auth_token, and twilio_from_number are required for Twilio WhatsApp send/verify.',
-            ];
-        }
-
-        if (($channels['messenger']['enabled'] ?? false) && (
-            empty($channels['messenger']['access_token'])
-            || empty($channels['messenger']['app_secret'])
-        )) {
-            $issues[] = [
-                'severity' => 'critical',
-                'title' => 'Messenger config incomplete',
-                'detail' => 'access_token and app_secret are required for Messenger send/verify.',
+                'title' => 'Messenger connection incomplete',
+                'detail' => 'Business enablement is live, but the admin-managed Messenger connection is not ready.',
             ];
         }
 

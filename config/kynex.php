@@ -17,6 +17,10 @@ return [
                 'connection' => env('QUEUE_REMINDERS_CONNECTION', env('QUEUE_CONNECTION', 'database')),
                 'queue' => env('QUEUE_REMINDERS_NAME', 'reminders'),
             ],
+            'billing' => [
+                'connection' => env('QUEUE_BILLING_CONNECTION', env('QUEUE_CONNECTION', 'database')),
+                'queue' => env('QUEUE_BILLING_NAME', 'billing'),
+            ],
         ],
         'worker_heartbeat_ttl' => (int) env('QUEUE_WORKER_HEARTBEAT_TTL', 300),
     ],

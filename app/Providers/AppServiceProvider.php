@@ -5,6 +5,15 @@ declare(strict_types=1);
 namespace App\Providers;
 
 use App\Http\Middleware\RequireSuperAdmin;
+use App\Models\BusinessDataRetentionSetting;
+use App\Models\DataGovernanceRequest;
+use App\Models\TeamInvite;
+use App\Models\User;
+use App\Policies\BusinessDataRetentionSettingPolicy;
+use App\Policies\DataGovernanceRequestPolicy;
+use App\Policies\TeamInvitePolicy;
+use App\Policies\UserPolicy;
+use App\Services\Audit\AuditLogger;
 use App\Services\Voice\VoiceProviderResolver;
 use App\Voice\Contracts\LlmStreamInterface;
 use App\Voice\Contracts\SpeechToTextInterface;
@@ -41,6 +50,7 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(SpeechToTextInterface::class, fn ($app) => $app->make(VoiceProviderResolver::class)->stt());
         $this->app->singleton(LlmStreamInterface::class, fn ($app) => $app->make(VoiceProviderResolver::class)->llm());
         $this->app->singleton(TextToSpeechInterface::class, fn ($app) => $app->make(VoiceProviderResolver::class)->tts());
+        $this->app->singleton('audit.logger', fn ($app) => new AuditLogger());
     }
 
     /**
@@ -57,6 +67,7 @@ class AppServiceProvider extends ServiceProvider
         }
 
         $this->registerMiddlewareAliases();
+        $this->registerPolicies();
         $this->registerHorizonGate();
     }
 
@@ -66,6 +77,14 @@ class AppServiceProvider extends ServiceProvider
     private function registerMiddlewareAliases(): void
     {
         Route::aliasMiddleware('super_admin', RequireSuperAdmin::class);
+    }
+
+    private function registerPolicies(): void
+    {
+        Gate::policy(User::class, UserPolicy::class);
+        Gate::policy(TeamInvite::class, TeamInvitePolicy::class);
+        Gate::policy(DataGovernanceRequest::class, DataGovernanceRequestPolicy::class);
+        Gate::policy(BusinessDataRetentionSetting::class, BusinessDataRetentionSettingPolicy::class);
     }
 
     /**

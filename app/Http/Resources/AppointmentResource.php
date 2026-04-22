@@ -31,6 +31,7 @@ class AppointmentResource extends JsonResource
 
         return [
             'id'                  => $this->id,
+            'service_id'          => $this->service_id,
             'service_type'        => $this->service_type,
             'status'              => $this->status,
             'booked_via'          => $this->booked_via,
@@ -56,6 +57,12 @@ class AppointmentResource extends JsonResource
                 'name'         => $this->provider->name,
                 'display_name' => $this->provider->displayName(),
                 'color'        => $this->providerColor($this->provider->id),
+            ]),
+            'service'             => $this->whenLoaded('service', fn () => [
+                'id' => $this->service->id,
+                'name' => $this->service->name,
+                'duration_minutes' => $this->service->duration_minutes,
+                'is_active' => $this->service->is_active,
             ]),
         ];
     }

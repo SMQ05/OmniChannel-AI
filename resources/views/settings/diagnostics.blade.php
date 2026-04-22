@@ -1,10 +1,10 @@
 <x-layouts.app title="Diagnostics">
 <div class="space-y-6">
-    <div class="rounded-2xl border border-gray-800 bg-gray-900/60 p-6">
+    <div class="panel p-6">
         <div class="flex items-center justify-between gap-4">
             <div>
                 <h1 class="text-xl font-semibold text-white">Diagnostics</h1>
-                <p class="mt-1 text-sm text-gray-400">Operational status for webhooks, queues, workers, integrations, and replay controls.</p>
+                <p class="mt-1 text-sm text-gray-400">Operational status for this business only. Cross-tenant monitoring and governance queue visibility remain in the admin control plane.</p>
             </div>
             <div class="text-right text-xs text-gray-500">
                 <div>Version: {{ $diagnostics['version']['app_version'] ?? 'unknown' }}</div>
@@ -24,7 +24,7 @@
     @endif
 
     <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        <div class="rounded-2xl border border-gray-800 bg-gray-900/60 p-5">
+        <div class="panel p-5">
             <div class="text-xs uppercase tracking-wide text-gray-500">Queue</div>
             <div class="mt-2 text-sm text-white">{{ $diagnostics['queue']['connection'] }} / {{ $diagnostics['queue']['queue_name'] }}</div>
             <div class="mt-2 text-sm {{ $diagnostics['queue']['status']['ok'] ? 'text-emerald-400' : 'text-red-400' }}">
@@ -44,7 +44,7 @@
             <div class="mt-1 text-xs text-gray-500">Failed jobs: {{ $diagnostics['queue']['failed_jobs_count'] ?? 'n/a' }}</div>
         </div>
 
-        <div class="rounded-2xl border border-gray-800 bg-gray-900/60 p-5">
+        <div class="panel p-5">
             <div class="text-xs uppercase tracking-wide text-gray-500">Redis</div>
             <div class="mt-2 text-sm {{ $diagnostics['redis']['ok'] ? 'text-emerald-400' : 'text-red-400' }}">
                 {{ $diagnostics['redis']['detail'] }}
@@ -55,7 +55,7 @@
             </div>
         </div>
 
-        <div class="rounded-2xl border border-gray-800 bg-gray-900/60 p-5">
+        <div class="panel p-5">
             <div class="text-xs uppercase tracking-wide text-gray-500">Scheduler</div>
             <div class="mt-2 text-sm text-white">
                 Last heartbeat:
@@ -71,7 +71,7 @@
             </div>
         </div>
 
-        <div class="rounded-2xl border border-gray-800 bg-gray-900/60 p-5">
+        <div class="panel p-5">
             <div class="text-xs uppercase tracking-wide text-gray-500">Voice Readiness</div>
             <div class="mt-2 text-sm {{ $diagnostics['voice']['ready'] ? 'text-emerald-400' : 'text-amber-300' }}">
                 {{ $diagnostics['voice']['ready'] ? 'Voice is ready for controlled rollout.' : 'Voice still has blockers.' }}
@@ -91,7 +91,7 @@
     </div>
 
     <div class="grid gap-6 xl:grid-cols-2">
-        <div class="rounded-2xl border border-gray-800 bg-gray-900/60 p-6">
+        <div class="panel p-6">
             <h2 class="text-sm font-semibold text-white">Webhook Endpoints</h2>
             <div class="mt-4 space-y-3 text-sm text-gray-300">
                 <div>
@@ -115,10 +115,10 @@
             </div>
         </div>
 
-        <div class="rounded-2xl border border-gray-800 bg-gray-900/60 p-6">
+        <div class="panel p-6">
             <h2 class="text-sm font-semibold text-white">Actions</h2>
             <div class="mt-4 grid gap-4">
-                <form method="POST" action="{{ route('settings.diagnostics.failed-jobs.retry') }}" class="flex items-center justify-between gap-3 rounded-xl border border-gray-800 px-4 py-3">
+                <form method="POST" action="{{ route('settings.diagnostics.failed-jobs.retry') }}" class="flex items-center justify-between gap-3 panel-subtle px-4 py-3">
                     @csrf
                     <div>
                         <div class="text-sm text-white">Retry failed jobs</div>
@@ -127,7 +127,7 @@
                     <button class="rounded-lg bg-indigo-500 px-3 py-2 text-sm font-medium text-white">Retry</button>
                 </form>
 
-                <form method="POST" action="{{ route('settings.diagnostics.inbound.replay') }}" class="flex items-center justify-between gap-3 rounded-xl border border-gray-800 px-4 py-3">
+                <form method="POST" action="{{ route('settings.diagnostics.inbound.replay') }}" class="flex items-center justify-between gap-3 panel-subtle px-4 py-3">
                     @csrf
                     <div>
                         <div class="text-sm text-white">Replay last inbound webhook</div>
@@ -140,26 +140,26 @@
     </div>
 
     <div class="grid gap-6 xl:grid-cols-2">
-        <div class="rounded-2xl border border-gray-800 bg-gray-900/60 p-6">
+        <div class="panel p-6">
             <h2 class="text-sm font-semibold text-white">Channel Tests</h2>
             <div class="mt-4 space-y-4">
                 @foreach (['whatsapp', 'messenger'] as $channel)
-                    <form method="POST" action="{{ route('settings.diagnostics.channels.test-send', $channel) }}" class="grid gap-3 rounded-xl border border-gray-800 p-4">
+                    <form method="POST" action="{{ route('settings.diagnostics.channels.test-send', $channel) }}" class="grid gap-3 panel-subtle p-4">
                         @csrf
                         <div class="text-sm text-white">Send test {{ ucfirst($channel) }}</div>
-                        <input name="recipient" class="rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-sm text-white" placeholder="Recipient ID / phone number">
-                        <input name="message" class="rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-sm text-white" placeholder="Optional message">
+                        <input name="recipient" class="field" placeholder="Recipient ID / phone number">
+                        <input name="message" class="field" placeholder="Optional message">
                         <button class="rounded-lg bg-indigo-500 px-3 py-2 text-sm font-medium text-white">Send Test</button>
                     </form>
                 @endforeach
             </div>
         </div>
 
-        <div class="rounded-2xl border border-gray-800 bg-gray-900/60 p-6">
+        <div class="panel p-6">
             <h2 class="text-sm font-semibold text-white">Integration Tests</h2>
             <div class="mt-4 space-y-4">
                 @foreach (['google_calendar' => 'Google Calendar', 'google_sheets' => 'Google Sheets'] as $service => $label)
-                    <form method="POST" action="{{ route('settings.diagnostics.integrations.test', $service) }}" class="flex items-center justify-between rounded-xl border border-gray-800 p-4">
+                    <form method="POST" action="{{ route('settings.diagnostics.integrations.test', $service) }}" class="flex items-center justify-between panel-subtle p-4">
                         @csrf
                         <div>
                             <div class="text-sm text-white">{{ $label }}</div>
@@ -172,7 +172,7 @@
         </div>
     </div>
 
-    <div class="rounded-2xl border border-gray-800 bg-gray-900/60 p-6">
+    <div class="panel p-6">
         <h2 class="text-sm font-semibold text-white">Open Issues</h2>
         <div class="mt-4 space-y-3">
             @forelse($diagnostics['issues'] as $issue)
@@ -187,7 +187,7 @@
     </div>
 
     <div class="grid gap-6 xl:grid-cols-2">
-        <div class="rounded-2xl border border-gray-800 bg-gray-900/60 p-6">
+        <div class="panel p-6">
             <h2 class="text-sm font-semibold text-white">Usage Snapshot</h2>
             <div class="mt-4 space-y-4">
                 @foreach(collect($diagnostics['usage']['metrics'])->take(4) as $metric)
@@ -209,11 +209,11 @@
             </div>
         </div>
 
-        <div class="rounded-2xl border border-gray-800 bg-gray-900/60 p-6">
+        <div class="panel p-6">
             <h2 class="text-sm font-semibold text-white">Latest Outbound Failures</h2>
             <div class="mt-4 space-y-3">
                 @forelse($diagnostics['latest_outbound_failures'] as $failure)
-                    <div class="rounded-xl border border-gray-800 px-4 py-3">
+                    <div class="panel-subtle px-4 py-3">
                         <div class="flex items-center justify-between gap-3">
                             <div class="text-sm text-white">{{ ucfirst($failure->channel) }} → {{ $failure->recipient_platform_id }}</div>
                             <div class="text-xs text-gray-500">{{ $failure->updated_at->diffForHumans() }}</div>
@@ -227,7 +227,7 @@
         </div>
     </div>
 
-    <div class="rounded-2xl border border-gray-800 bg-gray-900/60 p-6">
+    <div class="panel p-6">
         <h2 class="text-sm font-semibold text-white">Recent Failed Jobs</h2>
         <div class="mt-4 overflow-x-auto">
             <table class="min-w-full text-left text-sm text-gray-300">

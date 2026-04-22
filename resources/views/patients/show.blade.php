@@ -3,7 +3,7 @@
 <div class="max-w-4xl mx-auto">
 
     <div class="mb-6 flex items-center justify-between">
-        <a href="{{ route('patients.index') }}" class="text-sm text-gray-500 hover:text-white transition-colors">
+        <a href="{{ route('patients.index') }}" class="text-sm text-[var(--text-muted)] hover:text-[var(--text-strong)] transition-colors">
             ← Patients
         </a>
         <div class="flex gap-2">
@@ -22,7 +22,7 @@
     </div>
 
     {{-- Patient card --}}
-    <div class="rounded-2xl bg-gray-900/60 backdrop-blur border border-gray-800 p-6 mb-6">
+    <div class="panel p-6 mb-6">
         <div class="flex items-start gap-4">
             <div class="w-14 h-14 rounded-full bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center text-xl font-bold text-indigo-300">
                 {{ strtoupper(substr($patient->name ?? '?', 0, 1)) }}
@@ -57,7 +57,7 @@
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
         {{-- Appointments --}}
-        <div class="rounded-2xl bg-gray-900/60 backdrop-blur border border-gray-800 overflow-hidden">
+        <div class="panel overflow-hidden">
             <div class="px-5 py-4 border-b border-gray-800">
                 <h3 class="text-sm font-semibold text-white">Appointments ({{ $appointments->count() }})</h3>
             </div>
@@ -92,7 +92,7 @@
         </div>
 
         {{-- Conversation History --}}
-        <div class="rounded-2xl bg-gray-900/60 backdrop-blur border border-gray-800 overflow-hidden">
+        <div class="panel overflow-hidden">
             <div class="px-5 py-4 border-b border-gray-800">
                 <h3 class="text-sm font-semibold text-white">Conversations ({{ $conversations->count() }})</h3>
             </div>

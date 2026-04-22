@@ -6,7 +6,7 @@
         {{-- Provider filter --}}
         <select name="provider_id" onchange="this.form.submit()"
                 form="filter-form"
-                class="bg-gray-800 border border-gray-700 text-gray-300 text-sm rounded-lg px-3 py-2 focus:ring-indigo-500 focus:border-indigo-500">
+                class="field focus:ring-indigo-500 focus:border-indigo-500">
             <option value="">All Providers</option>
             @foreach($providers as $provider)
                 <option value="{{ $provider->id }}"
@@ -19,7 +19,7 @@
         {{-- Status filter --}}
         <select name="status" onchange="this.form.submit()"
                 form="filter-form"
-                class="bg-gray-800 border border-gray-700 text-gray-300 text-sm rounded-lg px-3 py-2">
+                class="field">
             <option value="">All Statuses</option>
             @foreach(['confirmed', 'completed', 'cancelled', 'no_show', 'pending'] as $s)
                 <option value="{{ $s }}" {{ request('status') === $s ? 'selected' : '' }}>
@@ -36,7 +36,7 @@
 
     {{-- New Appointment button --}}
     <a href="{{ route('appointments.create') }}"
-       class="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded-lg transition-colors">
+       class="flex items-center gap-2 px-4 py-2 btn-primary">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
         </svg>
@@ -72,7 +72,7 @@
 
         selectedAppointment: null,
     }"
-    class="rounded-2xl bg-gray-900/60 backdrop-blur border border-gray-800 overflow-hidden">
+    class="panel overflow-hidden">
 
     {{-- Calendar header --}}
     <div class="px-5 py-4 border-b border-gray-800 flex items-center justify-between">

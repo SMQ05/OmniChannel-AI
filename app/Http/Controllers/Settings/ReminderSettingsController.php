@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Settings;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -32,7 +31,6 @@ class ReminderSettingsController extends Controller
         return view('settings.reminders', [
             'business'         => $business,
             'reminderSettings' => $reminderSettings,
-            'managedByAdmin' => $this->managedByAdmin($request),
         ]);
     }
 
@@ -44,8 +42,6 @@ class ReminderSettingsController extends Controller
      */
     public function update(Request $request): RedirectResponse
     {
-        $this->ensureManagedByAdmin($request);
-
         $validated = $request->validate([
             'reminders'                      => ['required', 'array', 'min:0'],
             'reminders.*.offset_hours'       => ['required', 'integer', 'min:1', 'max:720'],
@@ -58,18 +54,6 @@ class ReminderSettingsController extends Controller
         $business->reminder_settings = ['reminders' => $validated['reminders'] ?? []];
         $business->save();
 
-        return redirect()->route('settings.reminders')->with('success', 'Reminder settings saved.');
-    }
-
-    private function managedByAdmin(Request $request): bool
-    {
-        return $request->session()->has('impersonating_as') || $request->user()?->role === 'super_admin';
-    }
-
-    private function ensureManagedByAdmin(Request $request): void
-    {
-        if (!$this->managedByAdmin($request)) {
-            throw new AuthorizationException('Reminder setup is managed by Kynex Solutions.');
-        }
+        return redirect()->route('settings.reminders')->with('success', 'Reminder rules saved.');
     }
 }

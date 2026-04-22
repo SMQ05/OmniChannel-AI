@@ -1,8 +1,12 @@
 <x-admin.layouts.admin title="Plans">
 
+<div class="mb-6 flex items-center justify-end">
+    <a href="{{ route('admin.billing.prices.index') }}" class="btn-primary px-4 py-2">Open Billing Price Catalog</a>
+</div>
+
 <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
 
-    <div class="xl:col-span-1 rounded-2xl bg-gray-900/60 backdrop-blur border border-gray-800 p-6">
+    <div class="xl:col-span-1 panel p-6">
         <h2 class="text-sm font-semibold text-white mb-4">Create Missing Plan</h2>
 
         @if(empty($missingCodes))
@@ -13,7 +17,7 @@
 
                 <div>
                     <label class="block text-xs text-gray-500 mb-1">Code</label>
-                    <select name="code" class="w-full bg-gray-800 border border-gray-700 text-gray-300 text-sm rounded-lg px-3 py-2">
+                    <select name="code" class="w-full field">
                         @foreach($missingCodes as $code)
                             <option value="{{ $code }}">{{ ucfirst($code) }}</option>
                         @endforeach
@@ -22,12 +26,12 @@
 
                 <div>
                     <label class="block text-xs text-gray-500 mb-1">Name</label>
-                    <input type="text" name="name" required class="w-full bg-gray-800 border border-gray-700 text-gray-100 text-sm rounded-lg px-3 py-2">
+                    <input type="text" name="name" required class="w-full field">
                 </div>
 
                 <div>
                     <label class="block text-xs text-gray-500 mb-1">Description</label>
-                    <textarea name="description" rows="3" class="w-full bg-gray-800 border border-gray-700 text-gray-100 text-sm rounded-lg px-3 py-2"></textarea>
+                    <textarea name="description" rows="3" class="w-full field"></textarea>
                 </div>
 
                 <div>
@@ -45,7 +49,7 @@
                     Active
                 </label>
 
-                <button type="submit" class="w-full px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded-lg transition-colors">
+                <button type="submit" class="w-full px-4 py-2 btn-primary">
                     Create Plan
                 </button>
             </form>
@@ -55,7 +59,7 @@
     <div class="xl:col-span-2 space-y-4">
         @foreach($plans as $plan)
             <form method="POST" action="{{ route('admin.plans.update', $plan) }}"
-                  class="rounded-2xl bg-gray-900/60 backdrop-blur border border-gray-800 p-6 space-y-4">
+                  class="panel p-6 space-y-4">
                 @csrf
                 @method('PATCH')
 
@@ -73,12 +77,12 @@
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                         <label class="block text-xs text-gray-500 mb-1">Name</label>
-                        <input type="text" name="name" value="{{ $plan->name }}" required class="w-full bg-gray-800 border border-gray-700 text-gray-100 text-sm rounded-lg px-3 py-2">
+                        <input type="text" name="name" value="{{ $plan->name }}" required class="w-full field">
                     </div>
 
                     <div>
                         <label class="block text-xs text-gray-500 mb-1">Description</label>
-                        <input type="text" name="description" value="{{ $plan->description }}" class="w-full bg-gray-800 border border-gray-700 text-gray-100 text-sm rounded-lg px-3 py-2">
+                        <input type="text" name="description" value="{{ $plan->description }}" class="w-full field">
                     </div>
                 </div>
 
@@ -93,7 +97,7 @@
                 </div>
 
                 <div class="flex justify-end">
-                    <button type="submit" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded-lg transition-colors">
+                    <button type="submit" class="px-4 py-2 btn-primary">
                         Save Plan
                     </button>
                 </div>

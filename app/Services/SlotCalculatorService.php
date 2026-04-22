@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Models\BusinessService;
 use App\Models\Provider;
 use Carbon\Carbon;
 use Carbon\CarbonImmutable;
@@ -64,9 +65,10 @@ class SlotCalculatorService
      * @param  Collection<int, Provider>  $providers  Eager-loaded with blockedDates and appointments
      * @param  string                     $timezone   The business timezone (e.g. 'Asia/Karachi')
      * @param  int                        $days       Lookahead days — silently clamped to MAX_DAYS
+     * @param  BusinessService|null       $service    Optional structured service selection
      * @return list<SlotArray>
      */
-    public function compute(Collection $providers, string $timezone, int $days = 7): array
+    public function compute(Collection $providers, string $timezone, int $days = 7, ?BusinessService $service = null): array
     {
         // Enforce the strict 7-day maximum regardless of caller input.
         $days  = min($days, self::MAX_DAYS);
@@ -82,6 +84,10 @@ class SlotCalculatorService
 
             foreach ($providers as $provider) {
                 if (!$provider->is_active) {
+                    continue;
+                }
+
+                if ($service !== null && !$provider->services->contains('id', $service->id)) {
                     continue;
                 }
 
@@ -101,6 +107,7 @@ class SlotCalculatorService
                     timezone: $timezone,
                     startTime: (string) ($daySchedule['start'] ?? '09:00'),
                     endTime: (string) ($daySchedule['end'] ?? '17:00'),
+                    service: $service,
                 );
 
                 $slots = array_merge($slots, $daySlots);
@@ -126,6 +133,7 @@ class SlotCalculatorService
      * @param  string           $timezone   Business timezone string
      * @param  string           $startTime  Day start in HH:MM format
      * @param  string           $endTime    Day end in HH:MM format
+     * @param  BusinessService|null $service Optional structured service
      * @return list<SlotArray>
      */
     private function buildSlots(
@@ -134,8 +142,12 @@ class SlotCalculatorService
         string $timezone,
         string $startTime,
         string $endTime,
+        ?BusinessService $service = null,
     ): array {
-        $duration = $provider->slot_duration_minutes;
+        $duration = $service?->duration_minutes ?? $provider->slot_duration_minutes;
+        $stepMinutes = $provider->slot_duration_minutes;
+        $bufferBefore = $service?->bookingRuleInt('buffer_before_minutes', 0) ?? 0;
+        $bufferAfter = $service?->bookingRuleInt('buffer_after_minutes', 0) ?? 0;
 
         // Parse working window in business timezone, then convert to UTC
         $windowStart = Carbon::parse(
@@ -151,7 +163,7 @@ class SlotCalculatorService
         // Do not offer slots that have already started
         $earliest = Carbon::now()->utc();
         if ($windowStart->lessThan($earliest)) {
-            $windowStart = $earliest->copy()->ceilMinutes($duration);
+            $windowStart = $earliest->copy()->ceilMinutes($stepMinutes);
         }
 
         if ($windowStart->greaterThanOrEqualTo($windowEnd)) {
@@ -166,8 +178,10 @@ class SlotCalculatorService
 
         while ($cursor->copy()->addMinutes($duration)->lessThanOrEqualTo($windowEnd)) {
             $slotEnd = $cursor->copy()->addMinutes($duration);
+            $availabilityStart = $cursor->copy()->subMinutes($bufferBefore);
+            $availabilityEnd = $slotEnd->copy()->addMinutes($bufferAfter);
 
-            if (!$this->overlapsAnyInterval($cursor, $slotEnd, $bookedIntervals)) {
+            if (!$this->overlapsAnyInterval($availabilityStart, $availabilityEnd, $bookedIntervals)) {
                 $slots[] = [
                     'provider_id'   => $provider->id,
                     'provider_name' => $provider->displayName(),
@@ -179,7 +193,7 @@ class SlotCalculatorService
                 ];
             }
 
-            $cursor->addMinutes($duration);
+            $cursor->addMinutes($stepMinutes);
         }
 
         return $slots;

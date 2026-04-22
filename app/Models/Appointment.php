@@ -21,6 +21,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  * @property int                        $business_id
  * @property int                        $provider_id
  * @property int                        $patient_id
+ * @property int|null                   $service_id
  * @property string                     $service_type
  * @property \Carbon\Carbon             $start_time
  * @property \Carbon\Carbon             $end_time
@@ -46,6 +47,7 @@ class Appointment extends Model
         'business_id',
         'provider_id',
         'patient_id',
+        'service_id',
         'service_type',
         'start_time',
         'end_time',
@@ -115,6 +117,19 @@ class Appointment extends Model
     public function patient(): BelongsTo
     {
         return $this->belongsTo(Patient::class);
+    }
+
+    /**
+     * The structured service linked to this appointment when available.
+     *
+     * service_type remains the display/reminder snapshot while service_id is
+     * rolled out additively.
+     *
+     * @return BelongsTo<BusinessService, Appointment>
+     */
+    public function service(): BelongsTo
+    {
+        return $this->belongsTo(BusinessService::class, 'service_id');
     }
 
     /**

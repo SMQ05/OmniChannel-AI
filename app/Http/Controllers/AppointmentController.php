@@ -7,13 +7,17 @@ namespace App\Http\Controllers;
 use App\Http\Resources\AppointmentResource;
 use App\Jobs\SyncAppointmentJob;
 use App\Models\Appointment;
+use App\Models\Business;
+use App\Models\BusinessService;
 use App\Models\Patient;
 use App\Models\Provider;
+use App\Services\Operations\BusinessServiceCatalog;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
 /**
@@ -24,6 +28,11 @@ use Illuminate\View\View;
  */
 class AppointmentController extends Controller
 {
+    public function __construct(
+        private readonly BusinessServiceCatalog $businessServiceCatalog,
+    ) {
+    }
+
     /**
      * Render the appointments calendar index.
      */
@@ -37,7 +46,7 @@ class AppointmentController extends Controller
         $to   = Carbon::parse($request->input('to',   $now->copy()->endOfMonth()))->utc();
 
         $appointments = Appointment::query()
-            ->with(['patient', 'provider'])
+            ->with(['patient', 'provider', 'service'])
             ->whereBetween('start_time', [$from, $to])
             ->when($request->filled('provider_id'), fn ($q) => $q->where('provider_id', $request->provider_id))
             ->when($request->filled('status'), fn ($q) => $q->where('status', $request->status))
@@ -63,10 +72,12 @@ class AppointmentController extends Controller
         $business  = $request->user()->business;
         $providers = Provider::query()->where('is_active', true)->orderBy('name')->get();
         $patients  = Patient::query()->orderBy('name')->get();
+        $services  = $this->businessServiceCatalog->activeForBusiness($business);
 
         return view('appointments.create', [
             'providers' => $providers,
             'patients'  => $patients,
+            'services'  => $services,
             'timezone'  => $business->timezone,
         ]);
     }
@@ -81,20 +92,28 @@ class AppointmentController extends Controller
         $validated = $request->validate([
             'provider_id'  => ['required', 'integer', Rule::exists('providers', 'id')->where('business_id', $business->id)],
             'patient_id'   => ['required', 'integer', Rule::exists('patients', 'id')->where('business_id', $business->id)],
-            'service_type' => ['required', 'string', 'max:255'],
+            'service_id'   => ['nullable', 'integer', Rule::exists('business_services', 'id')->where('business_id', $business->id)],
+            'service_type' => ['nullable', 'string', 'max:255', 'required_without:service_id'],
             'start_time'   => ['required', 'date'],
             'notes'        => ['nullable', 'string', 'max:2000'],
         ]);
 
         $startLocal = Carbon::parse($validated['start_time'], $business->timezone);
         $provider   = Provider::findOrFail($validated['provider_id']);
-        $endUtc     = $startLocal->copy()->addMinutes($provider->slot_duration_minutes)->utc();
+        [$service, $serviceSnapshot] = $this->resolveStructuredService(
+            business: $business,
+            provider: $provider,
+            validated: $validated,
+        );
+        $durationMinutes = $service?->duration_minutes ?? $provider->slot_duration_minutes;
+        $endUtc = $startLocal->copy()->addMinutes($durationMinutes)->utc();
 
         $appointment = Appointment::create([
             'business_id'  => $business->id,
             'provider_id'  => $validated['provider_id'],
             'patient_id'   => $validated['patient_id'],
-            'service_type' => $validated['service_type'],
+            'service_id'   => $service?->id,
+            'service_type' => $serviceSnapshot,
             'start_time'   => $startLocal->utc(),
             'end_time'     => $endUtc,
             'status'       => 'confirmed',
@@ -114,7 +133,7 @@ class AppointmentController extends Controller
      */
     public function show(Request $request, Appointment $appointment): View
     {
-        $appointment->loadMissing(['patient', 'provider', 'business']);
+        $appointment->loadMissing(['patient', 'provider', 'business', 'service']);
 
         return view('appointments.show', [
             'appointment' => $appointment,
@@ -130,11 +149,18 @@ class AppointmentController extends Controller
         $business  = $request->user()->business;
         $providers = Provider::query()->where('is_active', true)->orderBy('name')->get();
         $patients  = Patient::query()->orderBy('name')->get();
+        $services  = BusinessService::query()
+            ->where('business_id', $business->id)
+            ->orderByDesc('is_active')
+            ->orderBy('sort_order')
+            ->orderBy('name')
+            ->get();
 
         return view('appointments.edit', [
             'appointment' => $appointment,
             'providers'   => $providers,
             'patients'    => $patients,
+            'services'    => $services,
             'timezone'    => $business->timezone,
         ]);
     }
@@ -149,7 +175,8 @@ class AppointmentController extends Controller
         $validated = $request->validate([
             'provider_id'  => ['required', 'integer', Rule::exists('providers', 'id')->where('business_id', $business->id)],
             'patient_id'   => ['required', 'integer', Rule::exists('patients', 'id')->where('business_id', $business->id)],
-            'service_type' => ['required', 'string', 'max:255'],
+            'service_id'   => ['nullable', 'integer', Rule::exists('business_services', 'id')->where('business_id', $business->id)],
+            'service_type' => ['nullable', 'string', 'max:255', 'required_without:service_id'],
             'start_time'   => ['required', 'date'],
             'status'       => ['required', Rule::in(['pending', 'confirmed', 'cancelled', 'completed', 'no_show'])],
             'notes'        => ['nullable', 'string', 'max:2000'],
@@ -157,12 +184,19 @@ class AppointmentController extends Controller
 
         $startLocal = Carbon::parse($validated['start_time'], $business->timezone);
         $provider   = Provider::findOrFail($validated['provider_id']);
-        $endUtc     = $startLocal->copy()->addMinutes($provider->slot_duration_minutes)->utc();
+        [$service, $serviceSnapshot] = $this->resolveStructuredService(
+            business: $business,
+            provider: $provider,
+            validated: $validated,
+        );
+        $durationMinutes = $service?->duration_minutes ?? $provider->slot_duration_minutes;
+        $endUtc = $startLocal->copy()->addMinutes($durationMinutes)->utc();
 
         $appointment->update([
             'provider_id'  => $validated['provider_id'],
             'patient_id'   => $validated['patient_id'],
-            'service_type' => $validated['service_type'],
+            'service_id'   => $service?->id,
+            'service_type' => $serviceSnapshot,
             'start_time'   => $startLocal->utc(),
             'end_time'     => $endUtc,
             'status'       => $validated['status'],
@@ -203,11 +237,34 @@ class AppointmentController extends Controller
         $todayEnd   = $now->copy()->endOfDay()->utc();
 
         $appointments = Appointment::query()
-            ->with(['patient', 'provider'])
+            ->with(['patient', 'provider', 'service'])
             ->whereBetween('start_time', [$todayStart, $todayEnd])
             ->orderBy('start_time')
             ->get();
 
         return response()->json(AppointmentResource::collection($appointments));
+    }
+
+    /**
+     * @param  array<string, mixed>  $validated
+     * @return array{0: BusinessService|null, 1: string}
+     */
+    private function resolveStructuredService(Business $business, Provider $provider, array $validated): array
+    {
+        $service = $this->businessServiceCatalog->resolveForBusiness(
+            business: $business,
+            serviceId: isset($validated['service_id']) ? (int) $validated['service_id'] : null,
+            serviceType: $validated['service_type'] ?? null,
+        );
+
+        if ($service !== null && !$this->businessServiceCatalog->providerCanDeliver($provider, $service)) {
+            throw ValidationException::withMessages([
+                'service_id' => 'The selected provider is not mapped to that service.',
+            ]);
+        }
+
+        $snapshot = $service?->name ?? trim((string) ($validated['service_type'] ?? 'Appointment'));
+
+        return [$service, $snapshot];
     }
 }

@@ -15,6 +15,7 @@ use App\Queue\Attributes\Timeout;
 use App\Queue\Attributes\Tries;
 use App\Queue\Concerns\InteractsWithQueueAttributes;
 use App\Services\AppointmentOrchestrator;
+use App\Services\Billing\BillingLifecycleService;
 use App\Services\Messaging\OutboundMessageService;
 use App\Services\Queue\QueueRouteResolver;
 use App\Services\Queue\WorkerHeartbeatService;
@@ -62,6 +63,7 @@ class ProcessIncomingMessage implements ShouldQueue
         WorkerHeartbeatService $workerHeartbeatService,
         UsageMeteringService $usageMetering,
         PlanEnforcementService $planEnforcementService,
+        BillingLifecycleService $billingLifecycleService,
     ): void {
         $webhook = InboundWebhook::query()->with('business')->findOrFail($this->inboundWebhookId);
         $business = $webhook->business;
@@ -154,6 +156,20 @@ class ProcessIncomingMessage implements ShouldQueue
             }
 
             $conversationLog->appendMessage('user', $inboundText);
+            $conversationLog->ai_model_used = $business->llmProvider();
+            $conversationLog->save();
+
+            if ($billingLifecycleService->blocksOutboundMessaging($business)) {
+                $webhook->forceFill([
+                    'status' => 'blocked',
+                    'processed_at' => now(),
+                    'last_error' => 'Outbound reply suppressed because billing lifecycle is suspended.',
+                ])->save();
+
+                Log::warning('ProcessIncomingMessage: outbound reply blocked by suspended billing lifecycle.');
+
+                return;
+            }
 
             $providers = Provider::withoutGlobalScope(\App\Models\Concerns\TenantScope::class)
                 ->where('business_id', $business->id)
@@ -191,7 +207,6 @@ class ProcessIncomingMessage implements ShouldQueue
             );
 
             $conversationLog->appendMessage('assistant', $replyText);
-            $conversationLog->ai_model_used = $business->llmProvider();
             $conversationLog->save();
 
             Cache::put(

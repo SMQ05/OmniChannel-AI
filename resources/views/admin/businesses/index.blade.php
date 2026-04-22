@@ -1,14 +1,14 @@
-<x-admin.layouts.admin title="All Businesses">
+<x-admin.layouts.admin title="Businesses">
 
 {{-- Search + filter --}}
 <form method="GET" action="{{ route('admin.businesses.index') }}" class="flex flex-wrap gap-2 mb-6">
     <input type="text" name="search" value="{{ $filters['search'] ?? '' }}"
            placeholder="Search by name or slug…"
-           class="flex-1 min-w-48 bg-gray-800 border border-gray-700 text-gray-300 text-sm rounded-lg px-3 py-2
+           class="flex-1 min-w-48 field
                   placeholder-gray-600 focus:ring-indigo-500 focus:border-indigo-500">
 
     <select name="plan"
-            class="bg-gray-800 border border-gray-700 text-gray-300 text-sm rounded-lg px-3 py-2">
+            class="field">
         <option value="">All Plans</option>
         @foreach($plans as $plan)
             <option value="{{ $plan->code }}" {{ ($filters['plan'] ?? '') === $plan->code ? 'selected' : '' }}>
@@ -18,20 +18,20 @@
     </select>
 
     <select name="status"
-            class="bg-gray-800 border border-gray-700 text-gray-300 text-sm rounded-lg px-3 py-2">
+            class="field">
         <option value="">All Statuses</option>
         <option value="active"   {{ ($filters['status'] ?? '') === 'active'   ? 'selected' : '' }}>Active</option>
         <option value="inactive" {{ ($filters['status'] ?? '') === 'inactive' ? 'selected' : '' }}>Inactive</option>
     </select>
 
     <button type="submit"
-            class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded-lg transition-colors">
+            class="px-4 py-2 btn-primary">
         Filter
     </button>
 </form>
 
 {{-- Businesses table --}}
-<div class="rounded-2xl bg-gray-900/60 backdrop-blur border border-gray-800 overflow-visible">
+<div class="panel overflow-visible">
     <div class="overflow-x-auto overflow-y-visible">
     <table class="w-full text-sm">
         <thead>
@@ -125,6 +125,10 @@
                     {{-- Actions --}}
                     <td class="px-5 py-3.5">
                         <div class="flex items-center gap-2 justify-end">
+                            <a href="{{ route('admin.billing.show', $business) }}"
+                               class="px-3 py-1.5 bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 rounded-lg text-xs font-medium hover:bg-indigo-500/30 transition-colors">
+                                Billing
+                            </a>
                             <button type="button"
                                     @click="openControls = !openControls"
                                     class="px-3 py-1.5 bg-gray-800 text-gray-300 border border-gray-700 rounded-lg text-xs font-medium hover:bg-gray-700 transition-colors">
@@ -145,8 +149,9 @@
                     <td colspan="6" class="px-5 py-5">
                         @php
                             $subscription = $business->subscription;
+                            $messagingStates = $messagingStatesByBusiness[$business->id] ?? [];
                         @endphp
-                        <form method="POST" action="{{ route('admin.businesses.update-subscription', $business) }}" class="grid gap-4 rounded-2xl border border-gray-800 bg-gray-900/60 p-5">
+                        <form method="POST" action="{{ route('admin.businesses.update-subscription', $business) }}" class="grid gap-4 panel p-5">
                             @csrf
                             @method('PATCH')
 
@@ -163,19 +168,19 @@
                             <div class="grid gap-4 md:grid-cols-4">
                                 <div>
                                     <label class="mb-1 block text-xs text-gray-500">Status</label>
-                                    <input type="text" name="status" value="{{ $subscription?->status ?? $business->plan }}" class="w-full rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-sm text-white">
+                                    <input type="text" name="status" value="{{ $subscription?->status ?? $business->plan }}" class="w-full field">
                                 </div>
                                 <div>
                                     <label class="mb-1 block text-xs text-gray-500">Warn Ratio</label>
-                                    <input type="number" step="0.01" min="0" max="1" name="warn_at_ratio" value="{{ $subscription?->warn_at_ratio ?? 0.80 }}" class="w-full rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-sm text-white">
+                                    <input type="number" step="0.01" min="0" max="1" name="warn_at_ratio" value="{{ $subscription?->warn_at_ratio ?? 0.80 }}" class="w-full field">
                                 </div>
                                 <div>
                                     <label class="mb-1 block text-xs text-gray-500">Period Start</label>
-                                    <input type="date" name="current_period_start" value="{{ optional($subscription?->current_period_start)->toDateString() }}" class="w-full rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-sm text-white">
+                                    <input type="date" name="current_period_start" value="{{ optional($subscription?->current_period_start)->toDateString() }}" class="w-full field">
                                 </div>
                                 <div>
                                     <label class="mb-1 block text-xs text-gray-500">Period End</label>
-                                    <input type="date" name="current_period_end" value="{{ optional($subscription?->current_period_end)->toDateString() }}" class="w-full rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-sm text-white">
+                                    <input type="date" name="current_period_end" value="{{ optional($subscription?->current_period_end)->toDateString() }}" class="w-full field">
                                 </div>
                             </div>
 
@@ -212,7 +217,7 @@
                             </div>
                         </form>
 
-                        <form method="POST" action="{{ route('admin.businesses.update-owner-password', $business) }}" class="mt-4 grid gap-4 rounded-2xl border border-gray-800 bg-gray-900/60 p-5">
+                        <form method="POST" action="{{ route('admin.businesses.update-owner-password', $business) }}" class="mt-4 grid gap-4 panel p-5">
                             @csrf
                             @method('PATCH')
 
@@ -224,11 +229,11 @@
                             <div class="grid gap-4 md:grid-cols-2">
                                 <div>
                                     <label class="mb-1 block text-xs text-gray-500">New Password</label>
-                                    <input type="password" name="password" class="w-full rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-sm text-white">
+                                    <input type="password" name="password" class="w-full field">
                                 </div>
                                 <div>
                                     <label class="mb-1 block text-xs text-gray-500">Confirm Password</label>
-                                    <input type="password" name="password_confirmation" class="w-full rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-sm text-white">
+                                    <input type="password" name="password_confirmation" class="w-full field">
                                 </div>
                             </div>
 
@@ -239,7 +244,103 @@
                             </div>
                         </form>
 
-                        <div class="mt-4 grid gap-4 rounded-2xl border border-gray-800 bg-gray-900/60 p-5">
+                        <div class="mt-4 grid gap-4 panel p-5">
+                            <div class="flex items-start justify-between gap-4">
+                                <div>
+                                    <div class="text-sm font-semibold text-white">Messaging Control Plane</div>
+                                    <div class="text-xs text-gray-500">Admin-only credentials, provider internals, routing details, live tests, and explicit disconnect actions. Twilio WhatsApp remains legacy-only here, not the default onboarding path.</div>
+                                </div>
+                                <div class="text-xs text-gray-500">First-class records replace new writes to <code>businesses.channel_config</code>.</div>
+                            </div>
+
+                            <div class="grid gap-4 xl:grid-cols-2">
+                                @foreach(['whatsapp' => 'WhatsApp', 'messenger' => 'Messenger'] as $channelKey => $channelLabel)
+                                    @php($state = $messagingStates[$channelKey] ?? null)
+                                    <div class="rounded-xl border border-gray-800 p-4 space-y-4">
+                                        <div class="flex items-start justify-between gap-4">
+                                            <div>
+                                                <div class="text-sm font-semibold text-white">{{ $channelLabel }}</div>
+                                                <div class="mt-1 text-xs {{ ($state['connected'] ?? false) ? 'text-emerald-400' : 'text-amber-300' }}">
+                                                    {{ ($state['connected'] ?? false) ? 'Connection ready' : 'Connection incomplete' }}
+                                                </div>
+                                                <div class="mt-1 text-xs text-gray-500">
+                                                    Business status: {{ ucfirst($state['status'] ?? 'inactive') }}
+                                                    @if(($state['connection_source'] ?? null) === 'legacy_channel_config')
+                                                        · legacy fallback read active
+                                                    @endif
+                                                </div>
+                                            </div>
+                                            <div class="text-right text-xs text-gray-500">
+                                                <div>{{ $state['provider_label'] ?? 'Unknown provider' }}</div>
+                                                @if(!empty($state['summary']['identifier']))
+                                                    <div class="mt-1">{{ $state['summary']['identifier'] }}</div>
+                                                @endif
+                                            </div>
+                                        </div>
+
+                                        <form method="POST" action="{{ route('admin.businesses.messaging.update', [$business, $channelKey]) }}" class="space-y-3">
+                                            @csrf
+                                            @method('PATCH')
+
+                                            @if($channelKey === 'whatsapp')
+                                                <div>
+                                                    <label class="mb-1 block text-xs text-gray-500">Provider</label>
+                                                    <select name="provider" class="w-full field">
+                                                        <option value="meta_cloud" @selected(old('provider', $state['provider'] ?? 'meta_cloud') === 'meta_cloud')>Meta WhatsApp Cloud</option>
+                                                        <option value="twilio" @selected(old('provider', $state['provider'] ?? 'meta_cloud') === 'twilio')>Twilio WhatsApp (Legacy)</option>
+                                                    </select>
+                                                </div>
+                                                <input type="text" name="phone_number_id" value="{{ old('phone_number_id', $state['runtime_config']['phone_number_id'] ?? '') }}" class="w-full field" placeholder="Phone Number ID">
+                                                <input type="password" name="access_token" class="w-full field" placeholder="Access Token">
+                                                <input type="password" name="verify_token" class="w-full field" placeholder="Verify Token">
+                                                <input type="password" name="app_secret" class="w-full field" placeholder="App Secret">
+                                                <input type="text" name="twilio_account_sid" class="w-full field" placeholder="Twilio Account SID">
+                                                <input type="password" name="twilio_auth_token" class="w-full field" placeholder="Twilio Auth Token">
+                                                <input type="text" name="twilio_from_number" value="{{ old('twilio_from_number', $state['runtime_config']['twilio_from_number'] ?? '') }}" class="w-full field" placeholder="Twilio From Number">
+                                            @else
+                                                <input type="text" name="page_id" value="{{ old('page_id', $state['runtime_config']['page_id'] ?? '') }}" class="w-full field" placeholder="Page ID">
+                                                <input type="password" name="access_token" class="w-full field" placeholder="Access Token">
+                                                <input type="password" name="verify_token" class="w-full field" placeholder="Verify Token">
+                                                <input type="password" name="app_secret" class="w-full field" placeholder="App Secret">
+                                            @endif
+
+                                            <div class="flex flex-wrap gap-2">
+                                                <button type="submit" class="rounded-lg bg-indigo-600 px-4 py-2 text-xs font-medium text-white hover:bg-indigo-500">Save Connection</button>
+                                                <button type="button"
+                                                        x-data="{ result: '' }"
+                                                        @click="
+                                                            fetch('{{ route('admin.businesses.messaging.test', [$business, $channelKey]) }}', {
+                                                                method: 'POST',
+                                                                headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content }
+                                                            }).then(r => r.json()).then(d => { result = d.message; $el.nextElementSibling.textContent = d.message; $el.nextElementSibling.className = d.success ? 'text-xs text-emerald-400' : 'text-xs text-red-400'; });
+                                                        "
+                                                        class="rounded-lg border border-gray-700 px-4 py-2 text-xs font-medium text-gray-200 hover:bg-gray-800">
+                                                    Test Connection
+                                                </button>
+                                                <span class="self-center text-xs text-gray-500">
+                                                    {{ $state['last_test_message'] ?? 'No connection test yet.' }}
+                                                </span>
+                                            </div>
+                                        </form>
+
+                                        <form method="POST" action="{{ route('admin.businesses.messaging.disconnect', [$business, $channelKey]) }}" class="rounded-lg border border-red-500/20 bg-red-500/5 p-3 space-y-3">
+                                            @csrf
+                                            @method('PATCH')
+                                            <label class="flex items-center gap-2 text-xs text-red-200">
+                                                <input type="checkbox" name="confirm_disconnect" value="1">
+                                                Confirm disconnect and secret removal.
+                                            </label>
+                                            <input type="text" name="disconnect_reason" class="w-full field" placeholder="Optional disconnect reason for audit log">
+                                            <button type="submit" class="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2 text-xs font-medium text-red-200 hover:bg-red-500/20">
+                                                Disconnect {{ $channelLabel }}
+                                            </button>
+                                        </form>
+                                    </div>
+                                @endforeach
+                            </div>
+                        </div>
+
+                        <div class="mt-4 grid gap-4 panel p-5">
                             <div>
                                 <div class="text-sm font-semibold text-white">Managed Setup Shortcuts</div>
                                 <div class="text-xs text-gray-500">Jump into the tenant setup pages as SaaS admin to handle one-time onboarding, AI training, and channel configuration.</div>

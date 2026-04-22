@@ -43,3 +43,35 @@ Schedule::call(function (): void {
         now()->addMinutes(10),
     );
 })->everyMinute()->name('scheduler:heartbeat:reminders');
+
+Schedule::command('billing:run-cycles')
+    ->everyFifteenMinutes()
+    ->withoutOverlapping(15)
+    ->runInBackground()
+    ->onFailure(function (): void {
+        \Illuminate\Support\Facades\Log::error(
+            'Scheduled command billing:run-cycles failed.',
+        );
+    });
+
+Schedule::call(function (): void {
+    \Illuminate\Support\Facades\Cache::put(
+        'scheduler:heartbeat:billing',
+        now()->toISOString(),
+        now()->addMinutes(20),
+    );
+})->everyFiveMinutes()->name('scheduler:heartbeat:billing');
+
+Schedule::call(function (): void {
+    \App\Jobs\CaptureMonitoringSnapshotJob::dispatch();
+})->hourly()->name('monitoring:snapshot:platform');
+
+Schedule::command('data-controls:enforce-retention --dry-run')
+    ->dailyAt('02:00')
+    ->withoutOverlapping(120)
+    ->runInBackground()
+    ->onFailure(function (): void {
+        \Illuminate\Support\Facades\Log::error(
+            'Scheduled command data-controls:enforce-retention --dry-run failed.',
+        );
+    });

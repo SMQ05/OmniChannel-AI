@@ -5,181 +5,109 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Settings;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Auth\Access\AuthorizationException;
-use Illuminate\Http\JsonResponse;
+use App\Models\BusinessMessagingChannel;
+use App\Services\Audit\AuditLogger;
+use App\Services\ChannelReadinessService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
-/**
- * Manages WhatsApp and Messenger channel configuration (/settings/channels).
- *
- * Persists enabled/credentials state to businesses.channel_config.
- * The test endpoint verifies the access token is valid against the Meta Graph API.
- */
 class ChannelSettingsController extends Controller
 {
-    /**
-     * Render the channel settings page.
-     *
-     * @param  Request  $request
-     * @return View
-     */
-    public function edit(Request $request): View
+    public function edit(Request $request, ChannelReadinessService $channelReadinessService): View
     {
-        $business      = $request->user()->business;
-        $channelConfig = $business->channel_config ?? [];
+        $business = $request->user()->business;
 
         return view('settings.channels', [
-            'business'      => $business,
-            'channelConfig' => $channelConfig,
-            'webhookBase'   => url('api/webhook'),
-            'managedByAdmin' => $this->managedByAdmin($request),
+            'business' => $business,
+            'channels' => $channelReadinessService->forBusiness($business),
+            'webhookBase' => url('api/webhook'),
         ]);
     }
 
-    /**
-     * Save channel configuration for both WhatsApp and Messenger.
-     *
-     * @param  Request  $request
-     * @return RedirectResponse
-     */
-    public function update(Request $request): RedirectResponse
-    {
-        $this->ensureManagedByAdmin($request);
-
-        $validated = $request->validate([
-            'whatsapp.enabled'           => ['boolean'],
-            'whatsapp.provider'          => ['required', 'in:meta_cloud,twilio'],
-            'whatsapp.phone_number_id'   => ['nullable', 'string', 'max:50'],
-            'whatsapp.access_token'      => ['nullable', 'string', 'max:500'],
-            'whatsapp.verify_token'      => ['nullable', 'string', 'max:255'],
-            'whatsapp.app_secret'        => ['nullable', 'string', 'max:255'],
-            'whatsapp.twilio_account_sid' => ['nullable', 'string', 'max:255'],
-            'whatsapp.twilio_auth_token' => ['nullable', 'string', 'max:255'],
-            'whatsapp.twilio_from_number' => ['nullable', 'string', 'max:255'],
-            'messenger.enabled'          => ['boolean'],
-            'messenger.page_id'          => ['nullable', 'string', 'max:50'],
-            'messenger.access_token'     => ['nullable', 'string', 'max:500'],
-            'messenger.verify_token'     => ['nullable', 'string', 'max:255'],
-            'messenger.app_secret'       => ['nullable', 'string', 'max:255'],
+    public function update(
+        Request $request,
+        ChannelReadinessService $channelReadinessService,
+        AuditLogger $auditLogger,
+    ): RedirectResponse {
+        $request->validate([
+            'whatsapp.enabled' => ['boolean'],
+            'messenger.enabled' => ['boolean'],
+            'confirm_disable.whatsapp' => ['nullable', 'boolean'],
+            'confirm_disable.messenger' => ['nullable', 'boolean'],
+            'disable_reason.whatsapp' => ['nullable', 'string', 'max:255'],
+            'disable_reason.messenger' => ['nullable', 'string', 'max:255'],
         ]);
 
         $business = $request->user()->business;
+        $channels = $channelReadinessService->forBusiness($business);
 
-        $existing = $business->channel_config ?? [];
+        foreach (['whatsapp' => 'WhatsApp', 'messenger' => 'Messenger'] as $channel => $label) {
+            $requestedEnabled = $request->boolean("{$channel}.enabled");
+            $current = $channels[$channel];
 
-        $whatsapp = array_merge($existing['whatsapp'] ?? [], $validated['whatsapp'] ?? []);
-        $whatsapp['enabled'] = $request->boolean('whatsapp.enabled');
-
-        $messenger = array_merge($existing['messenger'] ?? [], $validated['messenger'] ?? []);
-        $messenger['enabled'] = $request->boolean('messenger.enabled');
-
-        $business->channel_config = [
-            'whatsapp'  => $whatsapp,
-            'messenger' => $messenger,
-        ];
-
-        $business->save();
-
-        return redirect()->route('settings.channels')->with('success', 'Channel settings saved.');
-    }
-
-    /**
-     * Test a channel's access token against the Meta Graph API.
-     *
-     * Returns JSON: { success: bool, message: string }
-     *
-     * @param  Request  $request
-     * @param  string   $channel  'whatsapp' or 'messenger'
-     * @return JsonResponse
-     */
-    public function test(Request $request, string $channel): JsonResponse
-    {
-        $this->ensureManagedByAdmin($request);
-
-        $business      = $request->user()->business;
-        $channelConfig = $business->channel_config[$channel] ?? [];
-
-        try {
-            return match ($channel) {
-                'whatsapp' => $this->testWhatsApp($channelConfig),
-                'messenger' => $this->testMetaToken((string) ($channelConfig['access_token'] ?? '')),
-                default => response()->json(['success' => false, 'message' => 'Unknown channel.']),
-            };
-        } catch (\Throwable $e) {
-            Log::error("ChannelSettingsController: test failed for channel {$channel}.", [
-                'business_id' => $business->id,
-                'error'       => $e->getMessage(),
-            ]);
-
-            return response()->json(['success' => false, 'message' => 'Connection error: ' . $e->getMessage()]);
-        }
-    }
-
-    /**
-     * @param  array<string, mixed>  $channelConfig
-     */
-    private function testWhatsApp(array $channelConfig): JsonResponse
-    {
-        $provider = (string) ($channelConfig['provider'] ?? 'meta_cloud');
-
-        if ($provider === 'twilio') {
-            $accountSid = (string) ($channelConfig['twilio_account_sid'] ?? '');
-            $authToken = (string) ($channelConfig['twilio_auth_token'] ?? '');
-
-            if ($accountSid === '' || $authToken === '') {
-                return response()->json(['success' => false, 'message' => 'Twilio SID or auth token is missing.']);
+            if ($requestedEnabled && !$current['connected']) {
+                throw ValidationException::withMessages([
+                    "{$channel}.enabled" => "{$label} cannot be enabled until the admin-managed connection is complete.",
+                ]);
             }
 
-            $response = Http::withBasicAuth($accountSid, $authToken)
-                ->timeout(10)
-                ->get("https://api.twilio.com/2010-04-01/Accounts/{$accountSid}.json");
-
-            if ($response->successful()) {
-                return response()->json(['success' => true, 'message' => 'Twilio connection successful.']);
+            if ($current['enabled'] && !$requestedEnabled && !$request->boolean("confirm_disable.{$channel}")) {
+                throw ValidationException::withMessages([
+                    "confirm_disable.{$channel}" => "Confirm the live {$label} disable action before saving.",
+                ]);
             }
 
-            return response()->json([
-                'success' => false,
-                'message' => 'Twilio error: ' . ($response->json('message') ?? $response->body()),
+            /** @var BusinessMessagingChannel $record */
+            $record = $channelReadinessService->businessChannel($business, $channel)
+                ?? new BusinessMessagingChannel([
+                    'business_id' => $business->id,
+                    'channel' => $channel,
+                ]);
+
+            $wasEnabled = (bool) $record->is_enabled;
+            $disableReason = trim((string) $request->input("disable_reason.{$channel}", ''));
+
+            $record->fill([
+                'is_enabled' => $requestedEnabled,
+                'approved_at' => $requestedEnabled ? ($record->approved_at ?? now()) : $record->approved_at,
+                'enabled_at' => $requestedEnabled ? now() : null,
+                'disabled_at' => $requestedEnabled ? null : ($current['enabled'] ? now() : $record->disabled_at),
+                'disabled_by_user_id' => $requestedEnabled ? null : ($current['enabled'] ? $request->user()->id : $record->disabled_by_user_id),
+                'disable_reason' => $requestedEnabled ? null : ($disableReason !== '' ? $disableReason : 'Disabled from business settings.'),
             ]);
+            $record->save();
+
+            if (!$wasEnabled && $requestedEnabled) {
+                $auditLogger->log(
+                    actor: $request->user(),
+                    action: 'messaging.channel_enabled',
+                    subjectType: BusinessMessagingChannel::class,
+                    subjectId: $record->id,
+                    payload: ['channel' => $channel, 'provider' => $current['provider']],
+                    request: $request,
+                    businessId: $business->id,
+                );
+            }
+
+            if ($current['enabled'] && !$requestedEnabled) {
+                $auditLogger->log(
+                    actor: $request->user(),
+                    action: 'messaging.channel_disabled',
+                    subjectType: BusinessMessagingChannel::class,
+                    subjectId: $record->id,
+                    payload: [
+                        'channel' => $channel,
+                        'provider' => $current['provider'],
+                        'reason' => $record->disable_reason,
+                    ],
+                    request: $request,
+                    businessId: $business->id,
+                );
+            }
         }
 
-        return $this->testMetaToken((string) ($channelConfig['access_token'] ?? ''));
-    }
-
-    private function testMetaToken(string $accessToken): JsonResponse
-    {
-        if ($accessToken === '') {
-            return response()->json(['success' => false, 'message' => 'No access token configured.']);
-        }
-
-        $response = Http::withToken($accessToken)
-            ->timeout(10)
-            ->get('https://graph.facebook.com/v19.0/me');
-
-        if ($response->successful()) {
-            return response()->json(['success' => true, 'message' => 'Connection successful.']);
-        }
-
-        return response()->json([
-            'success' => false,
-            'message' => 'Token invalid: ' . ($response->json('error.message') ?? $response->body()),
-        ]);
-    }
-
-    private function managedByAdmin(Request $request): bool
-    {
-        return $request->session()->has('impersonating_as') || $request->user()?->role === 'super_admin';
-    }
-
-    private function ensureManagedByAdmin(Request $request): void
-    {
-        if (!$this->managedByAdmin($request)) {
-            throw new AuthorizationException('Channel setup is managed by Kynex Solutions.');
-        }
+        return redirect()->route('settings.channels')->with('success', 'Messaging channel ownership settings saved.');
     }
 }

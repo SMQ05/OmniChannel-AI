@@ -1,4 +1,4 @@
-<x-admin.layouts.admin title="LLM API Keys">
+<x-admin.layouts.admin title="LLM Keys">
 
 <div class="max-w-3xl mx-auto space-y-6">
 
@@ -11,7 +11,7 @@
     {{-- =====================================================================
          ADD KEY FORM
          ===================================================================== --}}
-    <div class="rounded-2xl bg-gray-900/60 backdrop-blur border border-gray-800 p-6">
+    <div class="panel p-6">
         <h2 class="text-sm font-semibold text-white mb-4">Add / Replace Key</h2>
 
         <form method="POST" action="{{ route('admin.llm-keys.store') }}" class="space-y-4">
@@ -21,7 +21,7 @@
                 <div>
                     <label class="block text-xs text-gray-500 mb-1">Provider *</label>
                     <select name="provider" required
-                            class="w-full bg-gray-800 border border-gray-700 text-gray-300 text-sm rounded-lg px-3 py-2
+                            class="w-full field
                                    focus:ring-indigo-500 focus:border-indigo-500">
                         <option value="">Select…</option>
                         @foreach(['claude' => 'Claude (Anthropic)', 'gpt4o' => 'GPT-4o (OpenAI)', 'openrouter' => 'OpenRouter', 'minimax' => 'MiniMax'] as $val => $label)
@@ -33,7 +33,7 @@
                     <label class="block text-xs text-gray-500 mb-1">Label *</label>
                     <input type="text" name="label" required
                            placeholder="e.g. Production Anthropic Key"
-                           class="w-full bg-gray-800 border border-gray-700 text-gray-100 text-sm rounded-lg px-3 py-2
+                           class="w-full field
                                   focus:ring-indigo-500 focus:border-indigo-500">
                 </div>
                 <div>
@@ -41,7 +41,7 @@
                     <input type="password" name="key_value" required
                            autocomplete="off"
                            placeholder="sk-ant-… / sk-… / …"
-                           class="w-full bg-gray-800 border border-gray-700 text-gray-100 text-sm rounded-lg px-3 py-2
+                           class="w-full field
                                   focus:ring-indigo-500 focus:border-indigo-500">
                 </div>
             </div>
@@ -52,7 +52,7 @@
 
             <div class="flex justify-end">
                 <button type="submit"
-                        class="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded-lg transition-colors">
+                        class="px-5 py-2 btn-primary">
                     Save Key
                 </button>
             </div>
@@ -62,7 +62,7 @@
     {{-- =====================================================================
          EXISTING KEYS TABLE
          ===================================================================== --}}
-    <div class="rounded-2xl bg-gray-900/60 backdrop-blur border border-gray-800 overflow-hidden">
+    <div class="panel overflow-hidden">
         <div class="px-5 py-4 border-b border-gray-800">
             <h2 class="text-sm font-semibold text-white">Stored Keys</h2>
         </div>
@@ -118,7 +118,7 @@
                                     <form method="POST" action="{{ route('admin.llm-keys.activate', $key) }}">
                                         @csrf @method('PATCH')
                                         <button type="submit"
-                                                class="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">
+                                                class="text-xs text-[var(--brand)] hover:text-[var(--brand-strong)] transition-colors">
                                             Set Active
                                         </button>
                                     </form>

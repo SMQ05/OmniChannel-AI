@@ -4,13 +4,12 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
-use App\Http\Resources\ConversationLogResource;
 use App\Models\ConversationNote;
 use App\Models\ConversationLog;
+use App\Services\Conversations\HumanHandoffService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\View\View;
 
 /**
@@ -89,25 +88,21 @@ class ConversationController extends Controller
      * @param  ConversationLog  $conversationLog
      * @return JsonResponse|RedirectResponse
      */
-    public function takeover(Request $request, ConversationLog $conversationLog): JsonResponse|RedirectResponse
-    {
+    public function takeover(
+        Request $request,
+        ConversationLog $conversationLog,
+        HumanHandoffService $humanHandoffService,
+    ): JsonResponse|RedirectResponse {
         $conversationLog->loadMissing(['patient']);
         $business = $request->user()->business;
+        $patient = $conversationLog->patient;
 
-        // Persist human_mode flag to DB
-        $conversationLog->flagHumanHandoff();
-        $conversationLog->save();
-
-        // Write cache fast-path key (TTL: 24h — auto-expires if staff forget to release)
-        $patient  = $conversationLog->patient;
-        $redisKey = implode(':', [
-            'human_mode',
-            $business->id,
-            $conversationLog->channel,
-            $patient->platform_user_id,
-        ]);
-
-        Cache::put($redisKey, true, now()->addHours(24));
+        $humanHandoffService->activate(
+            business: $business,
+            patient: $patient,
+            conversationLog: $conversationLog,
+            source: 'manual_takeover',
+        );
 
         if ($request->expectsJson()) {
             return response()->json(['status' => 'ok', 'human_mode' => true]);

@@ -3,7 +3,27 @@
 {{-- =====================================================================
      PLATFORM STAT CARDS
      ===================================================================== --}}
-<div class="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+<div class="panel mb-6 p-5 sm:p-6">
+    <div class="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+        <div class="max-w-2xl">
+            <div class="page-eyebrow text-red-500">Shared Brain Context</div>
+            <h2 class="mt-2 text-xl font-semibold text-[var(--text-strong)]">The platform brain is still centralized here, and the UI should keep that architecture obvious.</h2>
+            <p class="mt-2 text-sm text-[var(--text-muted)]">Admin controls remain the shared control plane for rollout, business oversight, and platform services. That centralization is a current weakness, so this view makes it explicit instead of styling it away.</p>
+        </div>
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:max-w-xl">
+            <div class="panel-subtle p-4">
+                <p class="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-soft)]">Platform control</p>
+                <p class="mt-2 text-sm text-[var(--text-muted)]">Plans, businesses, voice rollout, and shared services still coordinate from one control surface.</p>
+            </div>
+            <div class="panel-subtle p-4">
+                <p class="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-soft)]">Tenant impact</p>
+                <p class="mt-2 text-sm text-[var(--text-muted)]">Changes made here shape the behavior and readiness of downstream business workspaces.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5 mb-8">
 
     @php
         $statCards = [
@@ -16,7 +36,7 @@
     @endphp
 
     @foreach($statCards as $card)
-        <div class="relative overflow-hidden rounded-2xl bg-gray-900/60 backdrop-blur border border-gray-800 p-5">
+        <div class="relative overflow-hidden panel p-5">
             <div class="absolute inset-0 bg-gradient-to-br from-{{ $card['color'] }}-600/10 to-transparent pointer-events-none"></div>
             <p class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">{{ $card['label'] }}</p>
             <p class="text-4xl font-bold text-white">{{ $card['value'] }}</p>
@@ -30,12 +50,12 @@
     {{-- =====================================================================
          QUEUE DEPTH MONITOR
          ===================================================================== --}}
-    <div class="rounded-2xl bg-gray-900/60 backdrop-blur border border-gray-800 overflow-hidden">
+    <div class="panel overflow-hidden">
         <div class="px-5 py-4 border-b border-gray-800 flex items-center justify-between">
             <h2 class="text-sm font-semibold text-white">Queue Depths</h2>
             @if(config('queue.default') === 'redis')
                 <a href="{{ route('admin.horizon') }}"
-                   class="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">
+                   class="text-xs text-[var(--brand)] hover:text-[var(--brand-strong)] transition-colors">
                     Open Horizon →
                 </a>
             @else
@@ -78,11 +98,11 @@
     {{-- =====================================================================
          RECENT BUSINESSES
          ===================================================================== --}}
-    <div class="rounded-2xl bg-gray-900/60 backdrop-blur border border-gray-800 overflow-hidden">
+    <div class="panel overflow-hidden">
         <div class="px-5 py-4 border-b border-gray-800 flex items-center justify-between">
             <h2 class="text-sm font-semibold text-white">Recent Businesses</h2>
             <a href="{{ route('admin.businesses.index') }}"
-               class="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">
+               class="text-xs text-[var(--brand)] hover:text-[var(--brand-strong)] transition-colors">
                 View all →
             </a>
         </div>
