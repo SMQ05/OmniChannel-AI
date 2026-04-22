@@ -60,12 +60,12 @@ $maxWidth = [
         x-transition:leave-start="opacity-100"
         x-transition:leave-end="opacity-0"
     >
-        <div class="absolute inset-0 bg-gray-950/80"></div>
+        <div class="absolute inset-0 bg-[rgba(15,23,42,0.28)] backdrop-blur-sm dark:bg-slate-950/55"></div>
     </div>
 
     <div
         x-show="show"
-        class="mb-6 overflow-hidden rounded-lg border border-gray-800 bg-gray-900 text-gray-100 shadow-xl sm:mx-auto sm:w-full {{ $maxWidth }}"
+        class="panel mb-6 overflow-hidden sm:mx-auto sm:w-full {{ $maxWidth }}"
         x-transition:enter="ease-out duration-300"
         x-transition:enter-start="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
         x-transition:enter-end="opacity-100 translate-y-0 sm:scale-100"
