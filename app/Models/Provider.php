@@ -7,6 +7,7 @@ namespace App\Models;
 use App\Models\Concerns\TenantScope;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
@@ -101,6 +102,19 @@ class Provider extends Model
     public function appointments(): HasMany
     {
         return $this->hasMany(Appointment::class);
+    }
+
+    /**
+     * Structured services this provider can deliver.
+     *
+     * @return BelongsToMany<BusinessService>
+     */
+    public function services(): BelongsToMany
+    {
+        return $this->belongsToMany(BusinessService::class, 'business_service_provider')
+            ->withTimestamps()
+            ->orderBy('business_services.sort_order')
+            ->orderBy('business_services.name');
     }
 
     // -------------------------------------------------------------------------

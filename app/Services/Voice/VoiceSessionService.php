@@ -16,6 +16,7 @@ use App\Models\VoiceSession;
 use App\Models\VoiceSummary;
 use App\Models\VoiceTurn;
 use App\Models\VoiceUsageEvent;
+use App\Services\Billing\BillingLifecycleService;
 use App\Services\Usage\UsageMeteringService;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -26,6 +27,7 @@ class VoiceSessionService
         private readonly VoicePromptBuilder $voicePromptBuilder,
         private readonly VoiceToolCatalog $voiceToolCatalog,
         private readonly UsageMeteringService $usageMeteringService,
+        private readonly BillingLifecycleService $billingLifecycleService,
     ) {}
 
     /**
@@ -38,7 +40,11 @@ class VoiceSessionService
         $business = $voiceChannel->business()->with('subscription.plan')->firstOrFail();
         $patient = $this->resolvePatient($business, (string) ($attributes['from_number'] ?? ''));
         $accepted = $this->canHandleVoice($business);
-        $reason = $accepted ? null : 'Voice is not enabled for this business or plan.';
+        $reason = $accepted
+            ? null
+            : ($this->billingLifecycleService->blocksVoiceSessions($business)
+                ? 'Voice is suspended because billing lifecycle is suspended.'
+                : 'Voice is not enabled for this business or plan.');
 
         $callLog = CallLog::query()->create([
             'business_id' => $business->id,
@@ -291,7 +297,11 @@ class VoiceSessionService
 
     private function canHandleVoice(Business $business): bool
     {
-        if (!$business->is_active || !config('voice_gateway.enabled')) {
+        if (
+            !$business->is_active
+            || !config('voice_gateway.enabled')
+            || $this->billingLifecycleService->blocksVoiceSessions($business)
+        ) {
             return false;
         }
 

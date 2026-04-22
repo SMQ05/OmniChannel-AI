@@ -9,6 +9,7 @@ use App\Queue\Attributes\Backoff;
 use App\Queue\Attributes\Tries;
 use App\Queue\Concerns\InteractsWithQueueAttributes;
 use App\Services\Messaging\OutboundMessageService;
+use App\Services\Billing\BillingLifecycleService;
 use App\Services\Queue\QueueRouteResolver;
 use App\Services\Queue\WorkerHeartbeatService;
 use App\Services\Usage\UsageMeteringService;
@@ -43,6 +44,7 @@ class SendReminderJob implements ShouldQueue
         OutboundMessageService $outboundMessageService,
         WorkerHeartbeatService $workerHeartbeatService,
         UsageMeteringService $usageMetering,
+        BillingLifecycleService $billingLifecycleService,
     ): void {
         $workerHeartbeatService->beat(
             queueConnection: $this->connection ?: (string) config('queue.default'),
@@ -93,6 +95,16 @@ class SendReminderJob implements ShouldQueue
         }
 
         $business = $appointment->business;
+
+        if ($billingLifecycleService->blocksReminders($business)) {
+            Log::warning('SendReminderJob: billing lifecycle suspended, skipping reminder.', [
+                'appointment_id' => $appointment->id,
+                'business_id' => $business->id,
+            ]);
+
+            return;
+        }
+
         $rules = $business->reminder_settings['reminders'] ?? [];
         $rule = $this->findRule($rules, $this->offsetHours);
 

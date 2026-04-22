@@ -63,10 +63,60 @@ class VoiceSettingsPageTest extends TestCase
         $response = $this->actingAs($user)->get(route('settings.voice'));
 
         $response->assertOk();
-        $response->assertSee('Voice Agent');
-        $response->assertSee('managed by Kynex Solutions', false);
-        $response->assertSee('Business Voice Settings');
-        $response->assertDontSee('Provider Test Actions');
+        $response->assertSee('Voice Ownership');
+        $response->assertSee('Business-owned voice behavior');
+        $response->assertSee('Platform-managed routing');
+        $response->assertSee('Read-only');
+    }
+
+    public function test_business_user_can_update_business_owned_voice_fields_but_not_platform_routing(): void
+    {
+        $business = Business::query()->create([
+            'name' => 'Clinic',
+            'business_type' => 'clinic',
+            'slug' => 'clinic',
+            'timezone' => 'UTC',
+            'locale' => 'en',
+            'channel_config' => ['voice' => ['llm_provider' => 'openrouter']],
+            'integration_config' => [],
+            'reminder_settings' => [],
+            'ai_config' => [],
+            'operations_config' => [],
+            'is_active' => true,
+            'plan' => 'pro',
+        ]);
+
+        $user = User::query()->create([
+            'business_id' => $business->id,
+            'name' => 'Owner',
+            'email' => 'owner@example.com',
+            'password' => bcrypt('password'),
+            'role' => 'business_owner',
+        ]);
+
+        $this->actingAs($user)
+            ->post(route('settings.voice.update'), [
+                'voice' => [
+                    'enabled' => '1',
+                    'greeting_message' => 'Hello from voice',
+                    'handoff_message' => 'A human will join shortly.',
+                    'notes' => 'Business-owned note',
+                    'llm_provider' => 'bad-value',
+                ],
+            ])
+            ->assertRedirect(route('settings.voice'));
+
+        $business->refresh();
+
+        $this->assertTrue((bool) $business->channel_config['voice']['enabled']);
+        $this->assertSame('Hello from voice', $business->channel_config['voice']['greeting_message']);
+        $this->assertSame('openrouter', $business->channel_config['voice']['llm_provider']);
+
+        $this->actingAs($user)
+            ->post(route('settings.voice.routing.update'), [
+                'voice' => ['llm_provider' => 'openrouter'],
+            ])
+            ->assertForbidden();
     }
 
     public function test_impersonated_admin_can_update_and_toggle_voice_settings(): void

@@ -35,4 +35,14 @@ return [
         ],
     ],
 
+    'billing' => [
+        'default_driver' => env('BILLING_PROVIDER_DRIVER'),
+        'providers' => [
+            'configured_portal' => [
+                'class' => \App\Services\Billing\Providers\ConfiguredPortalBillingProvider::class,
+                'portal_url' => env('BILLING_PROVIDER_PORTAL_URL'),
+            ],
+        ],
+    ],
+
 ];

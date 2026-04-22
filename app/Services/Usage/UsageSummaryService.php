@@ -78,7 +78,9 @@ class UsageSummaryService
                 'code' => $plan?->code ?? $business->plan,
                 'name' => $plan?->name ?? ucfirst($business->plan),
                 'description' => $plan?->description,
-                'status' => $subscription?->status ?? $business->plan,
+                'legacy_status' => $subscription?->status ?? $business->plan,
+                'lifecycle_status' => $subscription?->lifecycle_status,
+                'legacy_status_note' => 'Legacy compatibility state only. Billing truth now lives in lifecycle status, billing documents, and the billing ledger.',
             ],
             'period' => [
                 'start' => $periodStart,

@@ -3,7 +3,7 @@
 <div class="max-w-2xl mx-auto">
 
     <div class="mb-6 flex items-center justify-between">
-        <a href="{{ route('appointments.index') }}" class="text-sm text-gray-500 hover:text-white transition-colors">
+        <a href="{{ route('appointments.index') }}" class="text-sm text-[var(--text-muted)] hover:text-[var(--text-strong)] transition-colors">
             ← Appointments
         </a>
         <a href="{{ route('appointments.edit', $appointment) }}"
@@ -12,7 +12,7 @@
         </a>
     </div>
 
-    <div class="rounded-2xl bg-gray-900/60 backdrop-blur border border-gray-800 overflow-hidden">
+    <div class="panel overflow-hidden">
         <div class="p-6">
             <div class="flex items-start justify-between mb-6">
                 <div>
@@ -20,6 +20,12 @@
                     <p class="text-sm text-gray-400">
                         {{ \Carbon\Carbon::parse($appointment->start_time)->setTimezone($timezone)->format('l, F j, Y \a\t g:i A') }}
                     </p>
+                    @if($appointment->service)
+                        <p class="mt-2 text-xs text-gray-500">
+                            Structured service: <a href="{{ route('services.show', $appointment->service) }}" class="text-[var(--brand)] hover:text-[var(--brand-strong)]">{{ $appointment->service->name }}</a>
+                            · snapshot preserved for reminders and messaging
+                        </p>
+                    @endif
                 </div>
                 <span class="px-3 py-1 rounded-full text-sm font-medium
                     {{ match($appointment->status) {
@@ -40,7 +46,7 @@
                     <p class="text-xs text-gray-500">{{ $appointment->patient?->phone ?? '' }}</p>
                     @if($appointment->patient)
                         <a href="{{ route('patients.show', $appointment->patient) }}"
-                           class="text-xs text-indigo-400 hover:text-indigo-300 mt-1 inline-block">
+                           class="text-xs text-[var(--brand)] hover:text-[var(--brand-strong)] mt-1 inline-block">
                             View patient →
                         </a>
                     @endif
@@ -89,6 +95,7 @@
                             @csrf @method('PATCH')
                             <input type="hidden" name="provider_id"  value="{{ $appointment->provider_id }}">
                             <input type="hidden" name="patient_id"   value="{{ $appointment->patient_id }}">
+                            <input type="hidden" name="service_id"   value="{{ $appointment->service_id }}">
                             <input type="hidden" name="service_type" value="{{ $appointment->service_type }}">
                             <input type="hidden" name="start_time"   value="{{ \Carbon\Carbon::parse($appointment->start_time)->setTimezone($timezone)->format('Y-m-d\TH:i') }}">
                             <input type="hidden" name="status"       value="{{ $val }}">

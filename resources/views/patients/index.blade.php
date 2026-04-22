@@ -4,11 +4,11 @@
 <form method="GET" action="{{ route('patients.index') }}" class="flex flex-wrap gap-2 mb-6">
     <input type="text" name="search" value="{{ $filters['search'] ?? '' }}"
            placeholder="Search by name, phone, or email…"
-           class="flex-1 min-w-48 bg-gray-800 border border-gray-700 text-gray-300 text-sm rounded-lg px-3 py-2
+           class="flex-1 min-w-48 field
                   placeholder-gray-600 focus:ring-indigo-500 focus:border-indigo-500">
 
     <select name="platform"
-            class="bg-gray-800 border border-gray-700 text-gray-300 text-sm rounded-lg px-3 py-2">
+            class="field">
         <option value="">All Platforms</option>
         <option value="whatsapp"  {{ ($filters['platform'] ?? '') === 'whatsapp'  ? 'selected' : '' }}>WhatsApp</option>
         <option value="messenger" {{ ($filters['platform'] ?? '') === 'messenger' ? 'selected' : '' }}>Messenger</option>
@@ -20,7 +20,7 @@
     </button>
 
     <a href="{{ route('patients.create') }}"
-       class="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded-lg transition-colors">
+       class="flex items-center gap-2 px-4 py-2 btn-primary">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
         </svg>
@@ -29,7 +29,7 @@
 </form>
 
 {{-- Patient table --}}
-<div class="rounded-2xl bg-gray-900/60 backdrop-blur border border-gray-800 overflow-hidden">
+<div class="panel overflow-hidden">
     <table class="w-full text-sm">
         <thead>
             <tr class="border-b border-gray-800">
@@ -77,11 +77,11 @@
                     <td class="px-5 py-3.5 text-right">
                         <div class="flex items-center justify-end gap-3">
                             <a href="{{ route('patients.edit', $patient) }}"
-                               class="text-xs text-gray-500 hover:text-white transition-colors">
+                               class="text-xs text-[var(--text-muted)] hover:text-[var(--text-strong)] transition-colors">
                                 Edit
                             </a>
                             <a href="{{ route('patients.show', $patient) }}"
-                               class="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">
+                               class="text-xs text-[var(--brand)] hover:text-[var(--brand-strong)] transition-colors">
                                 View →
                             </a>
                         </div>
@@ -91,7 +91,7 @@
                 <tr>
                     <td colspan="5" class="px-5 py-16 text-center text-gray-600">
                         No patients found.
-                        <a href="{{ route('patients.create') }}" class="text-indigo-400 hover:text-indigo-300 ml-1">Add one →</a>
+                        <a href="{{ route('patients.create') }}" class="text-[var(--brand)] hover:text-[var(--brand-strong)] ml-1">Add one →</a>
                     </td>
                 </tr>
             @endforelse

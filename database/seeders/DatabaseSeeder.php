@@ -5,14 +5,18 @@ declare(strict_types=1);
 namespace Database\Seeders;
 
 use App\Models\Business;
+use App\Models\TeamInvite;
 use App\Models\User;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 
 class DatabaseSeeder extends Seeder
 {
     public function run(): void
     {
+        $this->call(RolePermissionSeeder::class);
+
         // Super Admin (no business_id)
         User::create([
             'name'     => 'Super Admin',
@@ -63,12 +67,39 @@ class DatabaseSeeder extends Seeder
         ]);
 
         // Business Owner for the demo clinic
-        User::create([
+        $owner = User::create([
             'name'        => 'Demo Owner',
             'email'       => 'owner@demo-clinic.com',
             'password'    => Hash::make('ChangeMe123!'),
             'role'        => 'business_owner',
             'business_id' => $business->id,
+        ]);
+
+        User::create([
+            'name' => 'Demo Manager',
+            'email' => 'manager@demo-clinic.com',
+            'password' => Hash::make('ChangeMe123!'),
+            'role' => 'manager',
+            'business_id' => $business->id,
+        ]);
+
+        User::create([
+            'name' => 'Demo Reception',
+            'email' => 'reception@demo-clinic.com',
+            'password' => Hash::make('ChangeMe123!'),
+            'role' => 'receptionist',
+            'business_id' => $business->id,
+        ]);
+
+        TeamInvite::query()->create([
+            'business_id' => $business->id,
+            'invited_by_user_id' => $owner->id,
+            'email' => 'newhire@demo-clinic.com',
+            'role' => 'staff',
+            'token_hash' => hash('sha256', Str::random(64)),
+            'status' => 'pending',
+            'expires_at' => now()->addDays(7),
+            'meta' => ['seeded' => true],
         ]);
     }
 }

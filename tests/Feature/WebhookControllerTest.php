@@ -36,6 +36,65 @@ class WebhookControllerTest extends TestCase
         Queue::assertPushed(ProcessIncomingMessage::class, 1);
     }
 
+    public function test_valid_whatsapp_webhook_uses_first_class_connection_records(): void
+    {
+        Queue::fake();
+
+        $business = Business::query()->create([
+            'name' => 'Clinic',
+            'business_type' => 'clinic',
+            'slug' => 'clinic-records',
+            'timezone' => 'UTC',
+            'locale' => 'en',
+            'channel_config' => ['whatsapp' => ['enabled' => false]],
+            'integration_config' => [],
+            'reminder_settings' => [],
+            'ai_config' => ['llm_provider' => 'claude'],
+            'is_active' => true,
+            'plan' => 'trial',
+        ]);
+
+        \App\Models\BusinessMessagingChannel::query()->create([
+            'business_id' => $business->id,
+            'channel' => 'whatsapp',
+            'is_enabled' => true,
+            'approved_at' => now(),
+            'enabled_at' => now(),
+        ]);
+
+        \App\Models\MessagingChannelConnection::query()->create([
+            'business_id' => $business->id,
+            'channel' => 'whatsapp',
+            'provider' => 'meta_cloud',
+            'status' => 'connected',
+            'credentials' => [
+                'access_token' => 'token',
+                'verify_token' => 'verify-token',
+                'app_secret' => 'meta-app-secret',
+            ],
+            'runtime_config' => [
+                'phone_number_id' => '123456',
+            ],
+            'connected_at' => now(),
+        ]);
+
+        $payload = $this->whatsAppPayload();
+        $rawBody = json_encode($payload, JSON_THROW_ON_ERROR);
+        $signature = 'sha256=' . hash_hmac('sha256', $rawBody, 'meta-app-secret');
+
+        $this->withHeader('X-Hub-Signature-256', $signature)
+            ->postJson(route('webhook.whatsapp.receive', ['slug' => $business->slug]), $payload)
+            ->assertOk()
+            ->assertJson(['status' => 'ok']);
+
+        $this->assertDatabaseHas('inbound_webhooks', [
+            'business_id' => $business->id,
+            'channel' => 'whatsapp',
+            'external_message_id' => 'wamid.test.1',
+        ]);
+        Queue::assertPushed(ProcessIncomingMessage::class, 1);
+    }
+
     public function test_invalid_signature_is_rejected(): void
     {
         $business = $this->makeBusiness();

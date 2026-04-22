@@ -12,7 +12,7 @@
     {{-- =====================================================================
          GOOGLE OAUTH CREDENTIALS (shared by Calendar + Sheets)
          ===================================================================== --}}
-    <div class="rounded-2xl bg-gray-900/60 backdrop-blur border border-gray-800 overflow-hidden">
+    <div class="panel overflow-hidden">
         <div class="px-5 py-4 border-b border-gray-800 flex items-center gap-3">
             <div class="w-8 h-8 rounded-lg bg-gray-700 flex items-center justify-center">
                 <svg class="w-4 h-4 text-gray-300" viewBox="0 0 24 24" fill="none" stroke="currentColor">
@@ -46,7 +46,7 @@
                            @if(!$managedByAdmin) disabled @endif
                            value="{{ old('google_credentials.client_id', $integrationConfig['google_credentials']['client_id'] ?? '') }}"
                            placeholder="123456789-abc…apps.googleusercontent.com"
-                           class="w-full bg-gray-800 border border-gray-700 text-gray-100 text-sm rounded-lg px-3 py-2
+                           class="w-full field
                                   focus:ring-indigo-500 focus:border-indigo-500 font-mono">
                 </div>
                 <div>
@@ -56,7 +56,7 @@
                            value="{{ old('google_credentials.client_secret', $integrationConfig['google_credentials']['client_secret'] ?? '') }}"
                            placeholder="GOCSPX-…"
                            autocomplete="off"
-                           class="w-full bg-gray-800 border border-gray-700 text-gray-100 text-sm rounded-lg px-3 py-2
+                           class="w-full field
                                   focus:ring-indigo-500 focus:border-indigo-500">
                 </div>
             </div>
@@ -70,7 +70,7 @@
             @if($managedByAdmin)
             <div class="flex justify-end">
                 <button type="submit"
-                        class="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded-lg transition-colors">
+                        class="px-5 py-2 btn-primary">
                     Save Credentials
                 </button>
             </div>
@@ -81,7 +81,7 @@
     {{-- =====================================================================
          GOOGLE CALENDAR
          ===================================================================== --}}
-    <div class="rounded-2xl bg-gray-900/60 backdrop-blur border border-gray-800 overflow-hidden"
+    <div class="panel overflow-hidden"
          x-data="{ enabled: {{ $integrationConfig['google_calendar']['enabled'] ?? false ? 'true' : 'false' }} }">
 
         <div class="px-5 py-4 border-b border-gray-800 flex items-center justify-between">
@@ -136,7 +136,7 @@
                 </div>
                 @if($managedByAdmin)
                 <button type="submit" form="calendar-form"
-                        class="mt-3 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm rounded-lg transition-colors">
+                        class="mt-3 px-4 py-2 btn-secondary">
                     Save
                 </button>
                 @endif
@@ -173,7 +173,7 @@
                             }).then(r => r.json()).then(d => { result = d; loading = false; })
                         "
                         :disabled="loading"
-                        class="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm rounded-lg transition-colors disabled:opacity-50">
+                        class="px-4 py-2 btn-secondary disabled:opacity-50">
                     <span x-text="loading ? 'Testing…' : 'Test Sync'"></span>
                 </button>
                 <template x-if="result">
@@ -188,7 +188,7 @@
     {{-- =====================================================================
          GOOGLE SHEETS
          ===================================================================== --}}
-    <div class="rounded-2xl bg-gray-900/60 backdrop-blur border border-gray-800 overflow-hidden"
+    <div class="panel overflow-hidden"
          x-data="{ enabled: {{ $integrationConfig['google_sheets']['enabled'] ?? false ? 'true' : 'false' }} }">
 
         <div class="px-5 py-4 border-b border-gray-800 flex items-center justify-between">
@@ -246,14 +246,14 @@
                         <input type="text" name="google_sheets[sheet_name]"
                                @if(!$managedByAdmin) disabled @endif
                                value="{{ old('google_sheets.sheet_name', $integrationConfig['google_sheets']['sheet_name'] ?? 'Appointments') }}"
-                               class="w-full bg-gray-800 border border-gray-700 text-gray-100 text-sm rounded-lg px-3 py-2
+                               class="w-full field
                                       focus:ring-indigo-500 focus:border-indigo-500">
                         <p class="text-xs text-gray-600 mt-1">The tab name at the bottom of the sheet (e.g. Sheet1).</p>
                     </div>
                 </div>
                 @if($managedByAdmin)
                 <button type="submit" form="sheets-form"
-                        class="mt-3 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm rounded-lg transition-colors">
+                        class="mt-3 px-4 py-2 btn-secondary">
                     Save
                 </button>
                 @endif
@@ -287,7 +287,7 @@
                             }).then(r => r.json()).then(d => { result = d; loading = false; })
                         "
                         :disabled="loading"
-                        class="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm rounded-lg transition-colors disabled:opacity-50">
+                        class="px-4 py-2 btn-secondary disabled:opacity-50">
                     <span x-text="loading ? 'Testing…' : 'Test Sync'"></span>
                 </button>
                 <template x-if="result">

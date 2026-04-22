@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Settings;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Auth\Access\AuthorizationException;
+use App\Services\Operations\BusinessServiceCatalog;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -19,6 +19,11 @@ use Illuminate\View\View;
  */
 class AiSettingsController extends Controller
 {
+    public function __construct(
+        private readonly BusinessServiceCatalog $businessServiceCatalog,
+    ) {
+    }
+
     /**
      * Render the AI settings / training panel.
      *
@@ -29,13 +34,15 @@ class AiSettingsController extends Controller
     {
         $business = $request->user()->business;
         $aiConfig = $business->ai_config ?? [];
-        $managedByAdmin = $this->managedByAdmin($request);
+        $structuredServices = $this->businessServiceCatalog->activeForBusiness($business);
 
         return view('settings.ai', [
             'business' => $business,
             'aiConfig' => $aiConfig,
-            'managedByAdmin' => $managedByAdmin,
+            'managedByAdmin' => $this->managedByAdmin($request),
             'compiledPrompt' => $this->compilePrompt($business, $aiConfig),
+            'structuredServices' => $structuredServices,
+            'legacyServiceFallbackCount' => count($aiConfig['services'] ?? []),
         ]);
     }
 
@@ -47,18 +54,12 @@ class AiSettingsController extends Controller
      */
     public function update(Request $request): RedirectResponse
     {
-        $this->ensureManagedByAdmin($request);
-
         $validated = $request->validate([
             'ai_name'      => ['required', 'string', 'max:100'],
             'persona'      => ['required', 'string', 'max:5000'],
             'tone'         => ['required', 'in:formal,friendly,casual'],
             'language'     => ['required', 'string', 'max:50'],
-            'llm_provider' => ['required', 'in:claude,gpt4o,openrouter,minimax'],
-            'services'     => ['nullable', 'array'],
-            'services.*.name'         => ['required', 'string', 'max:255'],
-            'services.*.duration_min' => ['required', 'integer', 'min:5'],
-            'services.*.price'        => ['nullable', 'numeric', 'min:0'],
+            'business_phone' => ['nullable', 'string', 'max:50'],
             'faqs'         => ['nullable', 'array'],
             'faqs.*.q'     => ['required', 'string', 'max:500'],
             'faqs.*.a'     => ['required', 'string', 'max:2000'],
@@ -69,7 +70,7 @@ class AiSettingsController extends Controller
         $business->ai_config = array_merge($business->ai_config ?? [], $validated);
         $business->save();
 
-        return redirect()->route('settings.ai')->with('success', 'AI configuration saved.');
+        return redirect()->route('settings.ai')->with('success', 'AI training content saved.');
     }
 
     /**
@@ -84,8 +85,6 @@ class AiSettingsController extends Controller
      */
     public function preview(Request $request): \Illuminate\Http\Response
     {
-        $this->ensureManagedByAdmin($request);
-
         $business  = $request->user()->business;
         $aiConfig  = $this->normalisePreviewConfig($request, $business->ai_config ?? []);
 
@@ -111,7 +110,7 @@ class AiSettingsController extends Controller
         $persona     = $aiConfig['persona']  ?? '';
         $tone        = $aiConfig['tone']     ?? 'friendly';
         $language    = $aiConfig['language'] ?? 'English';
-        $services    = $aiConfig['services'] ?? [];
+        $services    = $this->businessServiceCatalog->promptCatalog($business);
         $faqs        = $aiConfig['faqs']     ?? [];
 
         $serviceLines = array_map(
@@ -128,6 +127,7 @@ class AiSettingsController extends Controller
         return implode("\n\n", array_filter([
             "You are {$aiName}, a professional AI receptionist for {$business->name}, a {$business->business_type}.",
             $persona,
+            ($aiConfig['business_phone'] ?? '') !== '' ? "BUSINESS PHONE: {$aiConfig['business_phone']}" : '',
             "SERVICES OFFERED:\n" . ($serviceLines ? implode("\n", $serviceLines) : '  (none configured)'),
             $faqs ? "FREQUENTLY ASKED QUESTIONS:\n" . implode("\n\n", $faqLines) : '',
             "LANGUAGE: Always respond in {$language}.",
@@ -165,12 +165,5 @@ class AiSettingsController extends Controller
     private function managedByAdmin(Request $request): bool
     {
         return $request->session()->has('impersonating_as') || $request->user()?->role === 'super_admin';
-    }
-
-    private function ensureManagedByAdmin(Request $request): void
-    {
-        if (!$this->managedByAdmin($request)) {
-            throw new AuthorizationException('AI training is managed by Kynex Solutions.');
-        }
     }
 }

@@ -9,6 +9,7 @@ use App\Models\Business;
 use App\Models\InboundWebhook;
 use App\Models\OutboundMessageAttempt;
 use App\Models\QueueWorkerHeartbeat;
+use App\Services\ChannelReadinessService;
 use App\Services\Usage\UsageSummaryService;
 use App\Services\Voice\VoiceConfigurationService;
 use Illuminate\Support\Facades\Cache;
@@ -23,6 +24,7 @@ class DiagnosticsService
         private readonly StartupCheckService $startupCheckService,
         private readonly UsageSummaryService $usageSummaryService,
         private readonly VoiceConfigurationService $voiceConfigurationService,
+        private readonly ChannelReadinessService $channelReadinessService,
     ) {}
 
     /**
@@ -46,6 +48,7 @@ class DiagnosticsService
                 'whatsapp' => route('webhook.whatsapp.receive', ['slug' => $business->slug]),
                 'messenger' => route('webhook.messenger.receive', ['slug' => $business->slug]),
             ],
+            'channels' => $this->channelReadinessService->forBusiness($business),
             'queue' => [
                 'connection' => $queueConnection,
                 'queue_name' => $queueName,

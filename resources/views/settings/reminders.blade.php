@@ -1,13 +1,10 @@
-<x-layouts.app title="Reminder Settings">
+<x-layouts.app title="Reminders">
 
 <div class="max-w-2xl mx-auto">
-    @if(!$managedByAdmin)
-        <div class="mb-6 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-5 py-4 text-sm text-amber-200">
-            Reminder rules are managed by Kynex Solutions. This page is read-only for the clinic team.
-        </div>
-    @endif
+    <div class="mb-6 rounded-2xl border border-gray-800 bg-gray-900/60 px-5 py-4 text-sm text-gray-300">
+        Reminder timing and template ownership now sits with the business team. `service_type` remains the message-safe snapshot until the structured path is fully proven across reminders, exports, conversations, voice, and syncs.
+    </div>
     <form method="POST" action="{{ route('settings.reminders.update') }}"
-          class="{{ !$managedByAdmin ? 'pointer-events-none opacity-80' : '' }}"
           x-data="{
               rules: @js($reminderSettings['reminders'] ?? []),
               add() {
@@ -26,18 +23,16 @@
             <p class="text-sm text-gray-500">
                 Reminders are sent via the same channel the patient used to book.
             </p>
-            @if($managedByAdmin)
             <button type="button" @click="add()"
-                    class="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded-lg transition-colors">
+                    class="flex items-center gap-2 px-4 py-2 btn-primary">
                 + Add Rule
             </button>
-            @endif
         </div>
 
         {{-- Rules list --}}
         <div class="space-y-4">
             <template x-for="(rule, i) in rules" :key="i">
-                <div class="rounded-2xl bg-gray-900/60 backdrop-blur border border-gray-800 p-5 space-y-4">
+                <div class="panel p-5 space-y-4">
 
                     <div class="flex items-start justify-between gap-4">
                         <div class="grid grid-cols-2 gap-3 flex-1">
@@ -45,7 +40,7 @@
                                 <label class="block text-xs text-gray-500 mb-1">Hours before appointment *</label>
                                 <input type="number" :name="'reminders[' + i + '][offset_hours]'"
                                        x-model.number="rule.offset_hours" min="1" max="720" required
-                                       class="w-full bg-gray-800 border border-gray-700 text-gray-100 text-sm rounded-lg px-3 py-2
+                                       class="w-full field
                                               focus:ring-indigo-500 focus:border-indigo-500">
                             </div>
                             <div>
@@ -53,12 +48,11 @@
                                 <input type="text" :name="'reminders[' + i + '][label]'"
                                        x-model="rule.label" required
                                        placeholder="e.g. Day before, 2 hours before"
-                                       class="w-full bg-gray-800 border border-gray-700 text-gray-100 text-sm rounded-lg px-3 py-2
+                                       class="w-full field
                                               focus:ring-indigo-500 focus:border-indigo-500">
                             </div>
                         </div>
                         <button type="button" @click="remove(i)"
-                                @if(!$managedByAdmin) disabled @endif
                                 class="mt-5 text-gray-600 hover:text-red-400 transition-colors">
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
@@ -78,7 +72,7 @@
                         <textarea :name="'reminders[' + i + '][message_template]'"
                                   x-model="rule.message_template"
                                   rows="3" required maxlength="1024"
-                                  class="w-full bg-gray-800 border border-gray-700 text-gray-100 text-sm rounded-lg px-3 py-2
+                                  class="w-full field
                                          focus:ring-indigo-500 focus:border-indigo-500 resize-none"></textarea>
                         <p class="text-xs text-gray-600 mt-1">
                             Available placeholders:
@@ -112,20 +106,18 @@
             </template>
 
             <template x-if="rules.length === 0">
-                <div class="rounded-2xl bg-gray-900/40 border border-dashed border-gray-700 p-12 text-center">
+                <div class="panel-dashed p-12 text-center">
                     <p class="text-gray-600 text-sm">No reminder rules yet. Click "Add Rule" to create your first reminder.</p>
                 </div>
             </template>
         </div>
 
-        @if($managedByAdmin)
         <div class="flex justify-end mt-6">
             <button type="submit"
-                    class="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded-lg transition-colors">
+                    class="px-6 py-2.5 btn-primary">
                 Save Reminder Settings
             </button>
         </div>
-        @endif
     </form>
 </div>
 

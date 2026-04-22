@@ -1,4 +1,4 @@
-<x-layouts.app title="Dashboard">
+<x-layouts.app title="Home">
 
 {{-- =====================================================================
      STAT CARDS — Alpine.js polls /dashboard/stats every 30 seconds
@@ -16,7 +16,27 @@
     }"
     x-init="setInterval(() => refresh(), 30000)"
 >
-    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+    <div class="panel mb-6 p-5 sm:p-6">
+        <div class="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+            <div class="max-w-2xl">
+                <div class="page-eyebrow">Shared Brain Context</div>
+                <h2 class="mt-2 text-xl font-semibold text-[var(--text-strong)]">Business execution is local, but the platform brain still drives AI behavior and rollout policy.</h2>
+                <p class="mt-2 text-sm text-[var(--text-muted)]">This workspace handles appointments, conversations, and provider operations for one business. The cross-tenant AI rules, platform controls, and rollout decisions still live centrally, which remains the current architectural constraint.</p>
+            </div>
+            <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:max-w-xl">
+                <div class="panel-subtle p-4">
+                    <p class="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-soft)]">Local workspace</p>
+                    <p class="mt-2 text-sm text-[var(--text-muted)]">Patients, providers, appointments, and handoffs stay business-specific.</p>
+                </div>
+                <div class="panel-subtle p-4">
+                    <p class="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-soft)]">Shared platform brain</p>
+                    <p class="mt-2 text-sm text-[var(--text-muted)]">AI training, channel policy, diagnostics, and rollout readiness still depend on centralized platform logic.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-8">
 
         {{-- Today's Bookings --}}
         <div class="relative overflow-hidden rounded-2xl bg-gray-900/60 backdrop-blur border border-gray-800 p-5">
@@ -59,7 +79,7 @@
         ->values();
 @endphp
 
-<div class="mb-6 grid grid-cols-1 xl:grid-cols-2 gap-6">
+<div class="mb-6 grid grid-cols-1 gap-6 xl:grid-cols-2">
     <div class="rounded-2xl bg-gray-900/60 backdrop-blur border border-gray-800 p-5">
         <div class="flex items-center justify-between gap-4">
             <div>
@@ -98,7 +118,7 @@
             <a href="{{ route('settings.voice') }}" class="text-xs text-indigo-400 hover:text-indigo-300">Open voice →</a>
         </div>
 
-        <div class="mt-4 grid grid-cols-2 gap-4">
+        <div class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div class="rounded-xl border border-gray-800 p-4">
                 <div class="text-xs uppercase tracking-wide text-gray-500">Readiness</div>
                 <div class="mt-2 text-lg font-semibold {{ $voiceState['ready'] ? 'text-emerald-400' : 'text-amber-300' }}">{{ $voiceState['ready'] ? 'Ready' : 'Needs setup' }}</div>
@@ -117,6 +137,72 @@
             @endif
         </div>
     </div>
+</div>
+
+<div class="mb-6 rounded-2xl bg-gray-900/60 backdrop-blur border border-gray-800 p-5">
+    <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div class="max-w-2xl">
+            <div class="page-eyebrow">Business Operations Domain</div>
+            <h2 class="mt-2 text-xl font-semibold text-white">Structured services and booking rules now live locally, but the shared brain is still not visually or structurally centralized enough.</h2>
+            <p class="mt-2 text-sm text-gray-400">This operations layer improves local booking control without pretending the platform control-plane is unified. Partial service-provider mapping remains visible until the business finishes setup.</p>
+        </div>
+        <div class="flex flex-wrap gap-2">
+            @if(auth()->user()->canPermission('business.services.view'))
+                <a href="{{ route('services.index') }}" class="btn-secondary px-4 py-2 text-xs">Open services</a>
+            @endif
+            @if(auth()->user()->canPermission('business.services.manage'))
+                <a href="{{ route('settings.booking-rules') }}" class="btn-primary px-4 py-2 text-xs">Booking rules</a>
+            @endif
+        </div>
+    </div>
+
+    <div class="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div class="rounded-xl border border-gray-800 p-4">
+            <div class="text-xs uppercase tracking-wide text-gray-500">Active services</div>
+            <div class="mt-2 text-2xl font-semibold text-white">{{ $operationsOverview['active_services_count'] }}</div>
+            <div class="mt-1 text-xs text-gray-500">{{ $operationsOverview['legacy_services_count'] }} legacy AI service entries still remain in fallback config.</div>
+        </div>
+        <div class="rounded-xl border border-gray-800 p-4">
+            <div class="text-xs uppercase tracking-wide text-gray-500">Providers mapped</div>
+            <div class="mt-2 text-2xl font-semibold text-white">{{ $operationsOverview['mapped_providers_count'] }}</div>
+            <div class="mt-1 text-xs text-gray-500">{{ $operationsOverview['providers_without_services_count'] }} active provider{{ $operationsOverview['providers_without_services_count'] === 1 ? '' : 's' }} still need service mapping.</div>
+        </div>
+        <div class="rounded-xl border border-gray-800 p-4">
+            <div class="text-xs uppercase tracking-wide text-gray-500">Lead time</div>
+            <div class="mt-2 text-2xl font-semibold text-white">{{ $operationsOverview['booking_rules']['lead_time_minutes'] }} min</div>
+            <div class="mt-1 text-xs text-gray-500">Max advance: {{ $operationsOverview['booking_rules']['max_advance_days'] }} days</div>
+        </div>
+        <div class="rounded-xl border border-gray-800 p-4">
+            <div class="text-xs uppercase tracking-wide text-gray-500">Provider selection</div>
+            <div class="mt-2 text-lg font-semibold {{ $operationsOverview['booking_rules']['require_provider_selection'] ? 'text-amber-300' : 'text-emerald-400' }}">
+                {{ $operationsOverview['booking_rules']['require_provider_selection'] ? 'Required' : 'Optional' }}
+            </div>
+            <div class="mt-1 text-xs text-gray-500">{{ $operationsOverview['booking_rules']['allow_same_day_booking'] ? 'Same-day booking enabled' : 'Same-day booking disabled' }}</div>
+        </div>
+    </div>
+
+    @if($operationsOverview['services_without_providers_count'] > 0 || $operationsOverview['providers_without_services_count'] > 0)
+        <div class="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <div class="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4">
+                <p class="text-xs font-semibold uppercase tracking-[0.18em] text-amber-200">Services missing providers</p>
+                <p class="mt-2 text-sm text-amber-100">
+                    {{ $operationsOverview['services_without_providers_count'] }} service{{ $operationsOverview['services_without_providers_count'] === 1 ? '' : 's' }} exist without provider mapping.
+                </p>
+                @if(!empty($operationsOverview['services_without_providers']))
+                    <p class="mt-2 text-xs text-amber-100/80">{{ implode(' · ', array_slice($operationsOverview['services_without_providers'], 0, 4)) }}</p>
+                @endif
+            </div>
+            <div class="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4">
+                <p class="text-xs font-semibold uppercase tracking-[0.18em] text-amber-200">Providers missing services</p>
+                <p class="mt-2 text-sm text-amber-100">
+                    {{ $operationsOverview['providers_without_services_count'] }} active provider{{ $operationsOverview['providers_without_services_count'] === 1 ? '' : 's' }} still have no structured service mapping.
+                </p>
+                @if(!empty($operationsOverview['providers_without_services']))
+                    <p class="mt-2 text-xs text-amber-100/80">{{ implode(' · ', array_slice($operationsOverview['providers_without_services'], 0, 4)) }}</p>
+                @endif
+            </div>
+        </div>
+    @endif
 </div>
 
 <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">

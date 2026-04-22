@@ -33,14 +33,8 @@ class VoiceSettingsController extends Controller
 
     public function update(Request $request): RedirectResponse
     {
-        $this->ensureManagedByAdmin($request);
-
         $validated = $request->validate([
             'voice.enabled' => ['boolean'],
-            'voice.transport_provider' => ['nullable', Rule::in(['telnyx', 'sip'])],
-            'voice.stt_provider' => ['nullable', Rule::in(['deepgram'])],
-            'voice.llm_provider' => ['nullable', Rule::in(['openrouter'])],
-            'voice.tts_provider' => ['nullable', Rule::in(['elevenlabs'])],
             'voice.greeting_message' => ['nullable', 'string', 'max:1000'],
             'voice.handoff_message' => ['nullable', 'string', 'max:1000'],
             'voice.notes' => ['nullable', 'string', 'max:2000'],
@@ -55,6 +49,27 @@ class VoiceSettingsController extends Controller
         $business->save();
 
         return redirect()->route('settings.voice')->with('success', 'Voice settings saved.');
+    }
+
+    public function updateRouting(Request $request): RedirectResponse
+    {
+        $this->ensureManagedByAdmin($request);
+
+        $validated = $request->validate([
+            'voice.transport_provider' => ['nullable', Rule::in(['telnyx', 'sip'])],
+            'voice.stt_provider' => ['nullable', Rule::in(['deepgram'])],
+            'voice.llm_provider' => ['nullable', Rule::in(['openrouter'])],
+            'voice.tts_provider' => ['nullable', Rule::in(['elevenlabs'])],
+        ]);
+
+        $business = $request->user()->business;
+        $existing = $business->channel_config ?? [];
+        $voice = array_merge($existing['voice'] ?? [], $validated['voice'] ?? []);
+
+        $business->channel_config = array_merge($existing, ['voice' => $voice]);
+        $business->save();
+
+        return redirect()->route('settings.voice')->with('success', 'Voice routing settings saved.');
     }
 
     public function storeChannel(Request $request): RedirectResponse

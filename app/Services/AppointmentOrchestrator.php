@@ -7,11 +7,13 @@ namespace App\Services;
 use App\Jobs\SyncAppointmentJob;
 use App\Models\Appointment;
 use App\Models\Business;
+use App\Models\BusinessService;
 use App\Models\ConversationLog;
 use App\Models\Patient;
 use App\Models\Provider;
+use App\Services\Conversations\HumanHandoffService;
+use App\Services\Operations\BusinessServiceCatalog;
 use Carbon\Carbon;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Throwable;
@@ -39,6 +41,7 @@ use Throwable;
  * @phpstan-type AgentResponse array{
  *     intent:       string,
  *     provider_id:  int|null,
+ *     service_id:   int|null,
  *     date:         string|null,
  *     time:         string|null,
  *     service_type: string|null,
@@ -48,11 +51,11 @@ use Throwable;
  */
 class AppointmentOrchestrator
 {
-    /** Redis key prefix for human-mode flags (mirrors ProcessIncomingMessage). */
-    private const HUMAN_MODE_PREFIX = 'human_mode';
-
-    /** TTL for the human-mode Redis flag (seconds). */
-    private const HUMAN_MODE_TTL = 86400; // 24 hours
+    public function __construct(
+        private readonly ?BusinessServiceCatalog $businessServiceCatalog = null,
+        private readonly ?HumanHandoffService $humanHandoffService = null,
+    ) {
+    }
 
     /**
      * Execute the AI agent's intent and return the reply text to send
@@ -124,12 +127,18 @@ class AppointmentOrchestrator
             return "I couldn't find that provider. Could you let me know your preferred provider or would you like me to suggest one?";
         }
 
+        $service = $this->resolveService($business, $provider, $agentResponse);
+
+        if (($agentResponse['service_id'] ?? null) !== null && $service === null) {
+            return "I couldn't match that service to this provider. Could you choose a different provider or service?";
+        }
+
         // Convert local business time → UTC for DB storage
         [$startUtc, $endUtc] = $this->toUtcWindow(
             date: (string) $agentResponse['date'],
             time: (string) $agentResponse['time'],
             timezone: $business->timezone,
-            durationMinutes: $provider->slot_duration_minutes,
+            durationMinutes: $service?->duration_minutes ?? $provider->slot_duration_minutes,
         );
 
         try {
@@ -153,7 +162,8 @@ class AppointmentOrchestrator
                     'business_id'  => $business->id,
                     'provider_id'  => $provider->id,
                     'patient_id'   => $patient->id,
-                    'service_type' => (string) ($agentResponse['service_type'] ?? 'Appointment'),
+                    'service_id'   => $service?->id,
+                    'service_type' => $service?->name ?? (string) ($agentResponse['service_type'] ?? 'Appointment'),
                     'start_time'   => $startUtc,
                     'end_time'     => $endUtc,
                     'status'       => 'confirmed',
@@ -261,11 +271,17 @@ class AppointmentOrchestrator
             return "I couldn't find that provider. Could you let me know which provider you'd like to reschedule with?";
         }
 
+        $service = $this->resolveService($business, $provider, $agentResponse);
+
+        if (($agentResponse['service_id'] ?? null) !== null && $service === null) {
+            return "I couldn't match that service to this provider. Could you choose a different provider or service?";
+        }
+
         [$newStartUtc, $newEndUtc] = $this->toUtcWindow(
             date: (string) $agentResponse['date'],
             time: (string) $agentResponse['time'],
             timezone: $business->timezone,
-            durationMinutes: $provider->slot_duration_minutes,
+            durationMinutes: $service?->duration_minutes ?? $provider->slot_duration_minutes,
         );
 
         try {
@@ -305,7 +321,8 @@ class AppointmentOrchestrator
                     'business_id'  => $business->id,
                     'provider_id'  => $provider->id,
                     'patient_id'   => $patient->id,
-                    'service_type' => (string) ($agentResponse['service_type'] ?? $old->service_type),
+                    'service_id'   => $service?->id,
+                    'service_type' => $service?->name ?? (string) ($agentResponse['service_type'] ?? $old->service_type),
                     'start_time'   => $newStartUtc,
                     'end_time'     => $newEndUtc,
                     'status'       => 'confirmed',
@@ -353,25 +370,17 @@ class AppointmentOrchestrator
         ConversationLog $conversationLog,
         array $agentResponse,
     ): string {
-        // Mark the session as human-mode in the model (persisted by the job caller)
-        $conversationLog->flagHumanHandoff();
-
-        // Write the Redis flag so ProcessIncomingMessage fast-paths on the next turn
-        $humanModeKey = implode(':', [
-            self::HUMAN_MODE_PREFIX,
-            $business->id,
-            $patient->platform,
-            $patient->platform_user_id,
-        ]);
-
-        Cache::put($humanModeKey, true, self::HUMAN_MODE_TTL);
+        ($this->humanHandoffService ?? app(HumanHandoffService::class))->activate(
+            business: $business,
+            patient: $patient,
+            conversationLog: $conversationLog,
+            source: 'ai_agent',
+        );
 
         Log::info('AppointmentOrchestrator: human handoff triggered.', [
             'business_id' => $business->id,
             'patient_id'  => $patient->id,
         ]);
-
-        // TODO Phase 6: dispatch a dashboard broadcast notification to staff here.
 
         return $agentResponse['reply_text'];
     }
@@ -408,7 +417,28 @@ class AppointmentOrchestrator
             ->where('id', $providerId)
             ->where('business_id', $business->id)
             ->where('is_active', true)
+            ->with('services:id')
             ->first();
+    }
+
+    /**
+     * @param  AgentResponse  $agentResponse
+     */
+    private function resolveService(Business $business, Provider $provider, array $agentResponse): ?BusinessService
+    {
+        $service = ($this->businessServiceCatalog ?? app(BusinessServiceCatalog::class))->resolveForBusiness(
+            business: $business,
+            serviceId: isset($agentResponse['service_id']) ? (int) $agentResponse['service_id'] : null,
+            serviceType: $agentResponse['service_type'] ?? null,
+        );
+
+        if ($service === null) {
+            return null;
+        }
+
+        return (($this->businessServiceCatalog ?? app(BusinessServiceCatalog::class))->providerCanDeliver($provider, $service))
+            ? $service
+            : null;
     }
 
     /**

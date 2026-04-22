@@ -33,4 +33,9 @@ class Plan extends Model
     {
         return $this->hasMany(BusinessSubscription::class);
     }
+
+    public function billingPrices(): HasMany
+    {
+        return $this->hasMany(BillingPrice::class);
+    }
 }

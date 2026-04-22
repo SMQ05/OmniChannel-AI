@@ -5,9 +5,12 @@ declare(strict_types=1);
 namespace App\Services\Messaging;
 
 use App\Data\ChannelSendResult;
+use App\Exceptions\ChannelConfigurationException;
 use App\Exceptions\ChannelDeliveryException;
 use App\Models\Business;
 use App\Models\OutboundMessageAttempt;
+use App\Services\Billing\BillingLifecycleService;
+use App\Services\ChannelReadinessService;
 use App\Services\Channel\Contracts\ChannelServiceInterface;
 use App\Services\Channel\MessengerChannelService;
 use App\Services\Channel\WhatsAppChannelService;
@@ -19,6 +22,8 @@ class OutboundMessageService
         private readonly WhatsAppChannelService $whatsApp,
         private readonly MessengerChannelService $messenger,
         private readonly UsageMeteringService $usageMetering,
+        private readonly ChannelReadinessService $channelReadinessService,
+        private readonly BillingLifecycleService $billingLifecycleService,
     ) {}
 
     /**
@@ -69,10 +74,24 @@ class OutboundMessageService
         ])->save();
 
         try {
+            if ($this->billingLifecycleService->blocksOutboundMessaging($business)) {
+                throw new ChannelConfigurationException('Outbound messaging is suspended because billing lifecycle is suspended.');
+            }
+
+            $channelState = $this->channelReadinessService->forChannel($business, $channel);
+
+            if (!$channelState['connected']) {
+                throw new ChannelConfigurationException("{$channel} channel is not connected.");
+            }
+
+            if (!$channelState['enabled']) {
+                throw new ChannelConfigurationException("{$channel} channel is not enabled.");
+            }
+
             $result = $this->channelService($channel)->sendMessage(
                 platformUserId: $recipientPlatformId,
                 message: $message,
-                channelConfig: $business->channel_config[$channel] ?? [],
+                channelConfig: $this->channelReadinessService->resolveOutboundConfig($business, $channel),
                 context: [
                     'correlation_id' => $correlationId,
                     'business_id' => $business->id,
@@ -101,12 +120,12 @@ class OutboundMessageService
             );
 
             return $attempt;
-        } catch (ChannelDeliveryException $exception) {
+        } catch (ChannelDeliveryException|ChannelConfigurationException $exception) {
             $attempt->forceFill([
                 'status' => 'failed',
-                'http_status' => $exception->statusCode,
-                'response_body' => $exception->responseBody,
-                'failure_class' => $exception->transient ? 'transient' : 'permanent',
+                'http_status' => $exception instanceof ChannelDeliveryException ? $exception->statusCode : null,
+                'response_body' => $exception instanceof ChannelDeliveryException ? $exception->responseBody : null,
+                'failure_class' => $exception instanceof ChannelDeliveryException && $exception->transient ? 'transient' : 'permanent',
                 'last_error' => $exception->getMessage(),
             ])->save();
 
@@ -115,7 +134,7 @@ class OutboundMessageService
                 metric: 'failed_sends',
                 channel: $channel,
                 quantity: 1,
-                status: $exception->transient ? 'transient' : 'permanent',
+                status: $exception instanceof ChannelDeliveryException && $exception->transient ? 'transient' : 'permanent',
                 referenceType: OutboundMessageAttempt::class,
                 referenceId: $attempt->id,
                 meta: ['error' => $exception->getMessage()],

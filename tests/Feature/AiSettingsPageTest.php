@@ -13,7 +13,58 @@ class AiSettingsPageTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_business_owner_can_update_business_owned_ai_training_fields(): void
+    {
+        [$business, $user] = $this->makeBusinessUser();
+
+        $response = $this->actingAs($user)->post(route('settings.ai.update'), [
+            'ai_name' => 'Sara',
+            'business_phone' => '+15550001111',
+            'persona' => 'You are calm and efficient.',
+            'tone' => 'friendly',
+            'language' => 'English',
+            'faqs' => [
+                ['q' => 'Do you accept walk-ins?', 'a' => 'Walk-ins depend on availability.'],
+            ],
+            'llm_provider' => 'minimax',
+        ]);
+
+        $response->assertRedirect(route('settings.ai'));
+
+        $business->refresh();
+
+        $this->assertSame('Sara', $business->ai_config['ai_name']);
+        $this->assertSame('+15550001111', $business->ai_config['business_phone']);
+        $this->assertSame('friendly', $business->ai_config['tone']);
+        $this->assertSame('claude', $business->ai_config['llm_provider']);
+    }
+
     public function test_impersonated_admin_can_preview_unsaved_ai_prompt_values(): void
+    {
+        [$business, $user] = $this->makeBusinessUser();
+
+        $response = $this->withSession(['impersonating_as' => 999])->actingAs($user)->post(route('settings.ai.preview'), [
+            'ai_name' => 'Sara',
+            'persona' => 'You are calm and efficient.',
+            'tone' => 'friendly',
+            'language' => 'English',
+            'business_phone' => '+15550001111',
+            'faqs' => [
+                ['q' => 'Do you accept walk-ins?', 'a' => 'Walk-ins depend on availability.'],
+            ],
+        ]);
+
+        $response->assertOk();
+        $response->assertSeeText('You are Sara, a professional AI receptionist for Demo Clinic, a clinic.');
+        $response->assertSeeText('BUSINESS PHONE: +15550001111');
+        $response->assertSeeText('Do you accept walk-ins?');
+        $response->assertDontSeeText('Server Error');
+    }
+
+    /**
+     * @return array{0: Business, 1: User}
+     */
+    private function makeBusinessUser(): array
     {
         $business = Business::query()->create([
             'name' => 'Demo Clinic',
@@ -24,7 +75,8 @@ class AiSettingsPageTest extends TestCase
             'channel_config' => [],
             'integration_config' => [],
             'reminder_settings' => [],
-            'ai_config' => [],
+            'ai_config' => ['llm_provider' => 'claude'],
+            'operations_config' => [],
             'is_active' => true,
             'plan' => 'trial',
         ]);
@@ -37,24 +89,6 @@ class AiSettingsPageTest extends TestCase
             'role' => 'business_owner',
         ]);
 
-        $response = $this->withSession(['impersonating_as' => 999])->actingAs($user)->post(route('settings.ai.preview'), [
-            'ai_name' => 'Sara',
-            'persona' => 'You are calm and efficient.',
-            'tone' => 'friendly',
-            'language' => 'English',
-            'llm_provider' => 'openrouter',
-            'services' => [
-                ['name' => 'General Consultation', 'duration_min' => 30, 'price' => 1500],
-            ],
-            'faqs' => [
-                ['q' => 'Do you accept walk-ins?', 'a' => 'Walk-ins depend on availability.'],
-            ],
-        ]);
-
-        $response->assertOk();
-        $response->assertSeeText('You are Sara, a professional AI receptionist for Demo Clinic, a clinic.');
-        $response->assertSeeText('General Consultation (30 min)');
-        $response->assertSeeText('Do you accept walk-ins?');
-        $response->assertDontSeeText('Server Error');
+        return [$business, $user];
     }
 }

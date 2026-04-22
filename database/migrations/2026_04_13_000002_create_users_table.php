@@ -9,9 +9,9 @@ use Illuminate\Support\Facades\Schema;
 /**
  * Creates the users table.
  *
- * Users belong to a business (tenant) and carry one of two roles:
- * business_owner or staff. super_admin users are platform-level
- * and have a NULL business_id.
+ * Users belong to a business (tenant) and carry either business_owner,
+ * manager, receptionist, or staff. Platform users can also be
+ * super_admin or support_admin and have a NULL business_id.
  */
 return new class extends Migration
 {
@@ -34,7 +34,10 @@ return new class extends Migration
 
             $table->enum('role', [
                 'super_admin',
+                'support_admin',
                 'business_owner',
+                'manager',
+                'receptionist',
                 'staff',
             ])->default('staff');
 

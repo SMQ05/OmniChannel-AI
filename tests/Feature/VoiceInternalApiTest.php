@@ -63,6 +63,33 @@ class VoiceInternalApiTest extends TestCase
         ]);
     }
 
+    public function test_gateway_rejects_new_voice_session_when_billing_is_suspended(): void
+    {
+        [$business, $voiceChannel] = $this->seedVoiceBusiness();
+        $business->subscription()->update(['lifecycle_status' => 'suspended']);
+
+        $response = $this->withHeader('X-Voice-Gateway-Secret', 'test-shared-secret')
+            ->postJson('/api/internal/voice/sessions/start', [
+                'voice_channel_id' => $voiceChannel->id,
+                'provider' => 'telnyx',
+                'provider_call_id' => 'call-456',
+                'transport_stream_id' => 'stream-456',
+                'direction' => 'inbound',
+                'from_number' => '+15550001000',
+                'to_number' => $voiceChannel->phone_number,
+            ]);
+
+        $response->assertOk()
+            ->assertJsonPath('accepted', false)
+            ->assertJsonPath('reason', 'Voice is suspended because billing lifecycle is suspended.');
+
+        $this->assertDatabaseHas('voice_sessions', [
+            'business_id' => $business->id,
+            'provider_call_id' => 'call-456',
+            'status' => 'rejected',
+        ]);
+    }
+
     public function test_write_tool_calls_are_idempotent(): void
     {
         [$business, $voiceChannel] = $this->seedVoiceBusiness();
