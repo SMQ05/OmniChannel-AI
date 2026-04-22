@@ -176,7 +176,7 @@ If this is the first production deploy, verify these tables exist after migratio
 The current production-safe worker command is:
 
 ```bash
-php artisan queue:work database --queue=webhooks,integrations,reminders --sleep=1 --tries=3 --timeout=60 --max-time=3600
+php artisan queue:work database --queue=webhooks,integrations,reminders,billing --sleep=1 --tries=3 --timeout=60 --max-time=3600
 ```
 
 This is already encoded in the worker container entrypoint.
