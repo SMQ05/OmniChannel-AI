@@ -34,7 +34,7 @@ class MessengerChannelService implements ChannelServiceInterface
      *
      * @param  string               $platformUserId  The recipient's Messenger Page-Scoped ID (PSID)
      * @param  string               $message         The message text (max 2000 chars for Messenger)
-     * @param  array<string, mixed> $channelConfig   The messenger sub-array from businesses.channel_config
+     * @param  array<string, mixed> $channelConfig   The resolved outbound Messenger config
      * @param  array<string, mixed> $context         Additional tracing context
      */
     public function sendMessage(

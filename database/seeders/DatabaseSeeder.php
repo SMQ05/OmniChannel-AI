@@ -33,13 +33,13 @@ class DatabaseSeeder extends Seeder
             'timezone'      => 'Asia/Karachi',
             'locale'        => 'en',
             'channel_config' => [
-                'whatsapp'  => ['enabled' => false, 'phone_number_id' => '', 'access_token' => '', 'verify_token' => ''],
-                'messenger' => ['enabled' => false, 'page_id' => '', 'access_token' => '', 'verify_token' => ''],
+                'whatsapp'  => ['enabled' => false, 'provider' => 'meta_cloud', 'phone_number_id' => ''],
+                'messenger' => ['enabled' => false, 'provider' => 'meta', 'page_id' => ''],
             ],
             'integration_config' => [
-                'google_credentials' => ['client_id' => '', 'client_secret' => ''],
-                'google_calendar' => ['enabled' => false, 'calendar_id' => '', 'token' => []],
-                'google_sheets'   => ['enabled' => false, 'spreadsheet_id' => '', 'sheet_name' => 'Appointments', 'token' => []],
+                'google_credentials' => ['client_id' => ''],
+                'google_calendar' => ['enabled' => false, 'calendar_id' => ''],
+                'google_sheets'   => ['enabled' => false, 'spreadsheet_id' => '', 'sheet_name' => 'Appointments'],
             ],
             'reminder_settings' => [
                 'reminders' => [

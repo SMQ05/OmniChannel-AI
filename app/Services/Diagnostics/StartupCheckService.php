@@ -73,6 +73,7 @@ class StartupCheckService
         $channels = $this->channelReadinessService->forBusiness($business);
         $integrations = $business->integration_config ?? [];
         $voice = $business->channel_config['voice'] ?? [];
+        $hasGoogleCredentials = $business->hasGoogleOauthCredentials();
 
         if ($channels['whatsapp']['enabled'] && !$channels['whatsapp']['connected']) {
             $issues[] = [
@@ -91,8 +92,7 @@ class StartupCheckService
         }
 
         if (($integrations['google_calendar']['enabled'] ?? false) && (
-            empty($integrations['google_credentials']['client_id'])
-            || empty($integrations['google_credentials']['client_secret'])
+            !$hasGoogleCredentials
             || empty($integrations['google_calendar']['calendar_id'])
         )) {
             $issues[] = [
@@ -103,8 +103,7 @@ class StartupCheckService
         }
 
         if (($integrations['google_sheets']['enabled'] ?? false) && (
-            empty($integrations['google_credentials']['client_id'])
-            || empty($integrations['google_credentials']['client_secret'])
+            !$hasGoogleCredentials
             || empty($integrations['google_sheets']['spreadsheet_id'])
             || empty($integrations['google_sheets']['sheet_name'])
         )) {

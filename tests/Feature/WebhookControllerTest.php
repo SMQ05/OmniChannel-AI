@@ -6,6 +6,8 @@ namespace Tests\Feature;
 
 use App\Jobs\ProcessIncomingMessage;
 use App\Models\Business;
+use App\Models\BusinessMessagingChannel;
+use App\Models\MessagingChannelConnection;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
@@ -143,7 +145,7 @@ class WebhookControllerTest extends TestCase
 
     private function makeBusiness(): Business
     {
-        return Business::query()->create([
+        $business = Business::query()->create([
             'name' => 'Clinic',
             'business_type' => 'clinic',
             'slug' => 'clinic',
@@ -153,9 +155,7 @@ class WebhookControllerTest extends TestCase
                 'whatsapp' => [
                     'enabled' => true,
                     'phone_number_id' => '123456',
-                    'access_token' => 'token',
-                    'verify_token' => 'verify-token',
-                    'app_secret' => 'meta-app-secret',
+                    'provider' => 'meta_cloud',
                 ],
                 'messenger' => [
                     'enabled' => false,
@@ -167,11 +167,37 @@ class WebhookControllerTest extends TestCase
             'is_active' => true,
             'plan' => 'trial',
         ]);
+
+        BusinessMessagingChannel::query()->create([
+            'business_id' => $business->id,
+            'channel' => 'whatsapp',
+            'is_enabled' => true,
+            'approved_at' => now(),
+            'enabled_at' => now(),
+        ]);
+
+        MessagingChannelConnection::query()->create([
+            'business_id' => $business->id,
+            'channel' => 'whatsapp',
+            'provider' => 'meta_cloud',
+            'status' => 'connected',
+            'credentials' => [
+                'access_token' => 'token',
+                'verify_token' => 'verify-token',
+                'app_secret' => 'meta-app-secret',
+            ],
+            'runtime_config' => [
+                'phone_number_id' => '123456',
+            ],
+            'connected_at' => now(),
+        ]);
+
+        return $business;
     }
 
     private function makeTwilioBusiness(): Business
     {
-        return Business::query()->create([
+        $business = Business::query()->create([
             'name' => 'Clinic',
             'business_type' => 'clinic',
             'slug' => 'clinic-twilio',
@@ -181,8 +207,6 @@ class WebhookControllerTest extends TestCase
                 'whatsapp' => [
                     'enabled' => true,
                     'provider' => 'twilio',
-                    'twilio_account_sid' => 'AC123',
-                    'twilio_auth_token' => 'twilio-auth-token',
                     'twilio_from_number' => 'whatsapp:+14155238886',
                 ],
                 'messenger' => [
@@ -195,6 +219,31 @@ class WebhookControllerTest extends TestCase
             'is_active' => true,
             'plan' => 'trial',
         ]);
+
+        BusinessMessagingChannel::query()->create([
+            'business_id' => $business->id,
+            'channel' => 'whatsapp',
+            'is_enabled' => true,
+            'approved_at' => now(),
+            'enabled_at' => now(),
+        ]);
+
+        MessagingChannelConnection::query()->create([
+            'business_id' => $business->id,
+            'channel' => 'whatsapp',
+            'provider' => 'twilio',
+            'status' => 'connected',
+            'credentials' => [
+                'twilio_account_sid' => 'AC123',
+                'twilio_auth_token' => 'twilio-auth-token',
+            ],
+            'runtime_config' => [
+                'twilio_from_number' => 'whatsapp:+14155238886',
+            ],
+            'connected_at' => now(),
+        ]);
+
+        return $business;
     }
 
     /**

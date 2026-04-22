@@ -6,6 +6,7 @@ namespace Tests\Feature;
 
 use App\Models\Business;
 use App\Models\BusinessMessagingChannel;
+use App\Models\MessagingChannelConnection;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -45,19 +46,29 @@ class MessagingOwnershipSettingsTest extends TestCase
                 'whatsapp' => [
                     'provider' => 'meta_cloud',
                     'phone_number_id' => 'pnid-1',
-                    'access_token' => 'token-1',
-                    'verify_token' => 'verify-1',
-                    'app_secret' => 'secret-1',
                     'enabled' => false,
                 ],
                 'messenger' => [
+                    'provider' => 'meta',
                     'page_id' => 'page-1',
-                    'access_token' => 'token-2',
-                    'verify_token' => 'verify-2',
-                    'app_secret' => 'secret-2',
                     'enabled' => false,
                 ],
             ],
+        ]);
+
+        $this->seedConnection($business, 'whatsapp', 'meta_cloud', [
+            'access_token' => 'token-1',
+            'verify_token' => 'verify-1',
+            'app_secret' => 'secret-1',
+        ], [
+            'phone_number_id' => 'pnid-1',
+        ]);
+        $this->seedConnection($business, 'messenger', 'meta', [
+            'access_token' => 'token-2',
+            'verify_token' => 'verify-2',
+            'app_secret' => 'secret-2',
+        ], [
+            'page_id' => 'page-1',
         ]);
 
         $this->actingAs($owner)
@@ -167,12 +178,17 @@ class MessagingOwnershipSettingsTest extends TestCase
                 'whatsapp' => [
                     'provider' => 'meta_cloud',
                     'phone_number_id' => 'pnid-1',
-                    'access_token' => 'token-1',
-                    'verify_token' => 'verify-1',
-                    'app_secret' => 'secret-1',
                     'enabled' => true,
                 ],
             ],
+        ]);
+
+        $this->seedConnection($business, 'whatsapp', 'meta_cloud', [
+            'access_token' => 'token-1',
+            'verify_token' => 'verify-1',
+            'app_secret' => 'secret-1',
+        ], [
+            'phone_number_id' => 'pnid-1',
         ]);
 
         BusinessMessagingChannel::query()->create([
@@ -240,5 +256,27 @@ class MessagingOwnershipSettingsTest extends TestCase
         ]);
 
         return [$business, $user];
+    }
+
+    /**
+     * @param  array<string, mixed>  $credentials
+     * @param  array<string, mixed>  $runtimeConfig
+     */
+    private function seedConnection(
+        Business $business,
+        string $channel,
+        string $provider,
+        array $credentials,
+        array $runtimeConfig,
+    ): void {
+        MessagingChannelConnection::query()->create([
+            'business_id' => $business->id,
+            'channel' => $channel,
+            'provider' => $provider,
+            'status' => 'connected',
+            'credentials' => $credentials,
+            'runtime_config' => $runtimeConfig,
+            'connected_at' => now(),
+        ]);
     }
 }

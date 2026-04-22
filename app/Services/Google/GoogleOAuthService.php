@@ -12,16 +12,15 @@ use Illuminate\Support\Facades\Log;
 /**
  * Manages Google OAuth 2.0 token lifecycle for business integrations.
  *
- * Each business stores its own OAuth credentials inside
- * `businesses.integration_config` under the relevant service key:
+ * Each business stores its own OAuth credentials in encrypted storage:
  *
- *   integration_config.google_calendar.token = {
+ *   integration_secrets.google_calendar.token = {
  *     access_token:  string,
  *     refresh_token: string,
  *     expires_at:    int  (Unix timestamp)
  *   }
  *
- *   integration_config.google_sheets.token  = { … same shape … }
+ *   integration_secrets.google_sheets.token  = { … same shape … }
  *
  * Public API:
  *  - getValidToken(Business, service) — returns a fresh access_token,
@@ -31,7 +30,8 @@ use Illuminate\Support\Facades\Log;
  *
  * Token refresh uses the standard Google OAuth 2.0 token endpoint with
  * the `refresh_token` grant type. Client credentials are loaded from the
- * `credentials` sub-object stored in integration_config.
+ * encrypted integration secret store, with a temporary legacy fallback while
+ * older rows are migrated.
  *
  * Error handling:
  *  - HTTP connection failures → throw \RuntimeException (job retries)
@@ -65,7 +65,7 @@ class GoogleOAuthService
      */
     public function getValidToken(Business $business, string $service): string
     {
-        $tokenData = $business->integration_config[$service]['token'] ?? [];
+        $tokenData = $business->googleServiceToken($service);
         $expiresAt = (int) ($tokenData['expires_at'] ?? 0);
 
         $isExpired = $expiresAt === 0
@@ -86,7 +86,7 @@ class GoogleOAuthService
 
     /**
      * Force-refresh the OAuth token for the given service and persist
-     * the new credentials back to businesses.integration_config.
+     * the new credentials back to encrypted storage.
      *
      * Always hits the Google token endpoint regardless of current expiry.
      * Use this method after receiving a 401 Unauthorized response to
@@ -100,9 +100,8 @@ class GoogleOAuthService
      */
     public function refreshToken(Business $business, string $service): string
     {
-        $config      = $business->integration_config[$service] ?? [];
-        $credentials = $business->integration_config['google_credentials'] ?? [];
-        $tokenData   = $config['token']       ?? [];
+        $credentials = $business->googleOauthCredentials();
+        $tokenData = $business->googleServiceToken($service);
 
         $clientId     = (string) ($credentials['client_id']     ?? '');
         $clientSecret = (string) ($credentials['client_secret'] ?? '');
@@ -156,7 +155,7 @@ class GoogleOAuthService
         $accessToken  = (string) ($newTokenData['access_token'] ?? '');
         $expiresIn    = (int)    ($newTokenData['expires_in']   ?? 3600);
 
-        // Persist the refreshed token back to integration_config.
+        // Persist the refreshed token back to encrypted storage.
         // We keep the existing refresh_token in place — Google only returns
         // a new one when the user re-authorises the application.
         $this->persistToken($business, $service, [
@@ -175,7 +174,7 @@ class GoogleOAuthService
     }
 
     /**
-     * Persist new token data into businesses.integration_config for the
+     * Persist new token data into businesses.integration_secrets for the
      * given service, merging into the existing structure.
      *
      * @param  Business              $business   The tenant to update
@@ -185,14 +184,20 @@ class GoogleOAuthService
     private function persistToken(Business $business, string $service, array $tokenData): void
     {
         $integrationConfig = $business->integration_config ?? [];
+        $integrationSecrets = $business->integration_secrets ?? [];
 
-        // Merge new token data into the existing service block
-        $integrationConfig[$service]['token'] = array_merge(
-            $integrationConfig[$service]['token'] ?? [],
+        $serviceSecrets = $integrationSecrets[$service] ?? [];
+
+        $serviceSecrets['token'] = array_merge(
+            $serviceSecrets['token'] ?? [],
             $tokenData,
         );
 
+        $integrationSecrets[$service] = $serviceSecrets;
+        unset($integrationConfig[$service]['token']);
+
         $business->integration_config = $integrationConfig;
+        $business->integration_secrets = $integrationSecrets;
         $business->saveQuietly(); // skip model events — this is a credentials update
     }
 }

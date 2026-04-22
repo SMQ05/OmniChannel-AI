@@ -25,6 +25,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  * @property string                     $locale
  * @property array<string, mixed>|null  $channel_config
  * @property array<string, mixed>|null  $integration_config
+ * @property array<string, mixed>|null  $integration_secrets
  * @property array<string, mixed>|null  $reminder_settings
  * @property array<string, mixed>|null  $ai_config
  * @property array<string, mixed>|null  $operations_config
@@ -47,6 +48,7 @@ class Business extends Model
         'locale',
         'channel_config',
         'integration_config',
+        'integration_secrets',
         'reminder_settings',
         'ai_config',
         'operations_config',
@@ -75,6 +77,7 @@ class Business extends Model
         return [
             'channel_config'      => 'array',
             'integration_config'  => 'array',
+            'integration_secrets' => 'encrypted:array',
             'reminder_settings'   => 'array',
             'ai_config'           => 'array',
             'operations_config'   => 'array',
@@ -304,6 +307,67 @@ class Business extends Model
     public function isSheetsEnabled(): bool
     {
         return (bool) ($this->integration_config['google_sheets']['enabled'] ?? false);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function googleOauthCredentials(): array
+    {
+        $legacy = $this->integration_config['google_credentials'] ?? [];
+        $secrets = $this->integration_secrets['google_credentials'] ?? [];
+
+        if (!is_array($legacy)) {
+            $legacy = [];
+        }
+
+        if (!is_array($secrets)) {
+            $secrets = [];
+        }
+
+        return array_filter([
+            'client_id' => $legacy['client_id'] ?? ($secrets['client_id'] ?? null),
+            // Legacy fallback remains only for in-flight migrations before scrub completes.
+            'client_secret' => $secrets['client_secret'] ?? ($legacy['client_secret'] ?? null),
+        ], static fn (mixed $value): bool => is_string($value) ? trim($value) !== '' : filled($value));
+    }
+
+    public function hasGoogleOauthCredentials(): bool
+    {
+        $credentials = $this->googleOauthCredentials();
+
+        return trim((string) ($credentials['client_id'] ?? '')) !== ''
+            && trim((string) ($credentials['client_secret'] ?? '')) !== '';
+    }
+
+    public function googleOauthClientId(): string
+    {
+        return (string) ($this->googleOauthCredentials()['client_id'] ?? '');
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function googleServiceToken(string $service): array
+    {
+        $secrets = $this->integration_secrets[$service]['token'] ?? [];
+        $legacy = $this->integration_config[$service]['token'] ?? [];
+
+        if (!is_array($secrets)) {
+            $secrets = [];
+        }
+
+        if (!is_array($legacy)) {
+            $legacy = [];
+        }
+
+        // Legacy fallback remains only for in-flight migrations before scrub completes.
+        return $secrets !== [] ? $secrets : $legacy;
+    }
+
+    public function googleServiceConnected(string $service): bool
+    {
+        return trim((string) ($this->googleServiceToken($service)['access_token'] ?? '')) !== '';
     }
 
     /**
