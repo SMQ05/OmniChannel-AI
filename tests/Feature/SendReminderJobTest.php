@@ -7,7 +7,9 @@ namespace Tests\Feature;
 use App\Jobs\SendReminderJob;
 use App\Models\Appointment;
 use App\Models\Business;
+use App\Models\BusinessMessagingChannel;
 use App\Models\BusinessSubscription;
+use App\Models\MessagingChannelConnection;
 use App\Models\Patient;
 use App\Models\Provider;
 use Illuminate\Support\Facades\DB;
@@ -35,9 +37,7 @@ class SendReminderJobTest extends TestCase
                 'whatsapp' => [
                     'enabled' => true,
                     'phone_number_id' => '123456',
-                    'access_token' => 'token',
-                    'verify_token' => 'verify-token',
-                    'app_secret' => 'meta-app-secret',
+                    'provider' => 'meta_cloud',
                 ],
             ],
             'integration_config' => [],
@@ -50,6 +50,8 @@ class SendReminderJobTest extends TestCase
             'is_active' => true,
             'plan' => 'trial',
         ]);
+
+        $this->seedWhatsappConnection($business);
 
         $patient = Patient::query()->create([
             'business_id' => $business->id,
@@ -102,9 +104,7 @@ class SendReminderJobTest extends TestCase
                 'whatsapp' => [
                     'enabled' => true,
                     'phone_number_id' => '123456',
-                    'access_token' => 'token',
-                    'verify_token' => 'verify-token',
-                    'app_secret' => 'meta-app-secret',
+                    'provider' => 'meta_cloud',
                 ],
             ],
             'integration_config' => [],
@@ -117,6 +117,8 @@ class SendReminderJobTest extends TestCase
             'is_active' => true,
             'plan' => 'trial',
         ]);
+
+        $this->seedWhatsappConnection($business);
 
         BusinessSubscription::query()->create([
             'business_id' => $business->id,
@@ -163,5 +165,32 @@ class SendReminderJobTest extends TestCase
             'channel' => 'whatsapp',
         ]);
         $this->assertNull($appointment->fresh()->reminder_sent_at);
+    }
+
+    private function seedWhatsappConnection(Business $business): void
+    {
+        BusinessMessagingChannel::query()->create([
+            'business_id' => $business->id,
+            'channel' => 'whatsapp',
+            'is_enabled' => true,
+            'approved_at' => now(),
+            'enabled_at' => now(),
+        ]);
+
+        MessagingChannelConnection::query()->create([
+            'business_id' => $business->id,
+            'channel' => 'whatsapp',
+            'provider' => 'meta_cloud',
+            'status' => 'connected',
+            'credentials' => [
+                'access_token' => 'token',
+                'verify_token' => 'verify-token',
+                'app_secret' => 'meta-app-secret',
+            ],
+            'runtime_config' => [
+                'phone_number_id' => '123456',
+            ],
+            'connected_at' => now(),
+        ]);
     }
 }

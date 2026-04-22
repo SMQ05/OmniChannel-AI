@@ -28,6 +28,9 @@ use Illuminate\Support\Facades\Log;
  *  - Google Calendar (if business.integration_config.google_calendar.enabled)
  *  - Google Sheets   (if business.integration_config.google_sheets.enabled)
  *
+ * Secret material for these integrations lives in businesses.integration_secrets,
+ * not in the legacy integration_config JSON preferences blob.
+ *
  * Graceful degradation contract:
  *  Both services are always attempted in independent try/catch blocks.
  *  A Calendar failure does NOT prevent the Sheets sync from running.

@@ -19,7 +19,7 @@ use Illuminate\Support\Facades\Log;
  *   POST https://graph.facebook.com/v19.0/{phone_number_id}/messages
  *
  * Authentication:
- *   Bearer token from channel_config.whatsapp.access_token.
+ *   Bearer token from the resolved messaging connection credentials.
  *
  * Errors are surfaced as typed exceptions so queue jobs can classify
  * transient vs permanent delivery failures and retry safely.
@@ -35,7 +35,7 @@ class WhatsAppChannelService implements ChannelServiceInterface
      *
      * @param  string               $platformUserId  The recipient's WhatsApp phone number (E.164 format)
      * @param  string               $message         The message text (max 4096 chars for WhatsApp)
-     * @param  array<string, mixed> $channelConfig   The whatsapp sub-array from businesses.channel_config
+     * @param  array<string, mixed> $channelConfig   The resolved outbound WhatsApp config
      * @param  array<string, mixed> $context         Additional tracing context
      */
     public function sendMessage(

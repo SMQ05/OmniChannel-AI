@@ -44,7 +44,7 @@
                     <label class="block text-xs text-gray-500 mb-1">Client ID</label>
                     <input type="text" name="google_credentials[client_id]"
                            @if(!$managedByAdmin) disabled @endif
-                           value="{{ old('google_credentials.client_id', $integrationConfig['google_credentials']['client_id'] ?? '') }}"
+                           value="{{ old('google_credentials.client_id', $googleCredentials['client_id'] ?? '') }}"
                            placeholder="123456789-abc…apps.googleusercontent.com"
                            class="w-full field
                                   focus:ring-indigo-500 focus:border-indigo-500 font-mono">
@@ -53,11 +53,15 @@
                     <label class="block text-xs text-gray-500 mb-1">Client Secret</label>
                     <input type="password" name="google_credentials[client_secret]"
                            @if(!$managedByAdmin) disabled @endif
-                           value="{{ old('google_credentials.client_secret', $integrationConfig['google_credentials']['client_secret'] ?? '') }}"
                            placeholder="GOCSPX-…"
                            autocomplete="off"
                            class="w-full field
                                   focus:ring-indigo-500 focus:border-indigo-500">
+                    @if($googleCredentials['client_secret_configured'] ?? false)
+                        <p class="text-xs text-emerald-400 mt-1">Stored securely. Leave blank to keep the current secret.</p>
+                    @else
+                        <p class="text-xs text-gray-600 mt-1">Saved only to encrypted storage and never shown again after submit.</p>
+                    @endif
                 </div>
             </div>
 
@@ -94,7 +98,7 @@
                 </div>
                 <div>
                     <h2 class="text-sm font-semibold text-white">Google Calendar</h2>
-                    @if(!empty($integrationConfig['google_calendar']['token']['access_token']))
+                    @if($integrationStatus['google_calendar']['connected'] ?? false)
                         <p class="text-xs text-emerald-400 mt-0.5">✓ Connected</p>
                     @else
                         <p class="text-xs text-gray-600 mt-0.5">Not connected</p>
@@ -119,7 +123,7 @@
                 <div>
                     <label class="block text-xs text-gray-500 mb-1">
                         Calendar ID
-                        @if(!empty($integrationConfig['google_calendar']['token']['access_token']) && empty($integrationConfig['google_calendar']['calendar_id']))
+                        @if(($integrationStatus['google_calendar']['connected'] ?? false) && empty($integrationConfig['google_calendar']['calendar_id']))
                             <span class="text-yellow-400 ml-1">← required to activate sync</span>
                         @endif
                     </label>
@@ -127,8 +131,8 @@
                            @if(!$managedByAdmin) disabled @endif
                            value="{{ old('google_calendar.calendar_id', $integrationConfig['google_calendar']['calendar_id'] ?? '') }}"
                            placeholder="primary  or  your-calendar@group.calendar.google.com"
-                           class="w-full bg-gray-800 border {{ (empty($integrationConfig['google_calendar']['calendar_id']) && !empty($integrationConfig['google_calendar']['token']['access_token'])) ? 'border-yellow-500/60' : 'border-gray-700' }} text-gray-100 text-sm rounded-lg px-3 py-2
-                                  focus:ring-indigo-500 focus:border-indigo-500">
+                           class="w-full bg-gray-800 border {{ (empty($integrationConfig['google_calendar']['calendar_id']) && ($integrationStatus['google_calendar']['connected'] ?? false)) ? 'border-yellow-500/60' : 'border-gray-700' }} text-gray-100 text-sm rounded-lg px-3 py-2
+                                   focus:ring-indigo-500 focus:border-indigo-500">
                     <p class="text-xs text-gray-600 mt-1">
                         Find it in Google Calendar → Settings → your calendar → Calendar ID.
                         Use <span class="font-mono">primary</span> for your main calendar.
@@ -143,7 +147,7 @@
             </form>
 
             {{-- OAuth connect --}}
-            @php $hasCredentials = !empty($integrationConfig['google_credentials']['client_id']); @endphp
+            @php $hasCredentials = !empty($googleCredentials['client_id']) && ($googleCredentials['client_secret_configured'] ?? false); @endphp
             <div class="pt-3 border-t border-gray-800 flex items-center gap-3">
                 @if($hasCredentials && $managedByAdmin)
                     <a href="{{ route('settings.integrations.oauth.redirect', 'google_calendar') }}"
@@ -154,10 +158,10 @@
                             <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
                             <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
                         </svg>
-                        {{ !empty($integrationConfig['google_calendar']['token']['access_token']) ? 'Reconnect Google Account' : 'Connect Google Account' }}
+                        {{ ($integrationStatus['google_calendar']['connected'] ?? false) ? 'Reconnect Google Account' : 'Connect Google Account' }}
                     </a>
                 @else
-                    <p class="text-xs text-yellow-500">Save your Google Client ID above before connecting.</p>
+                    <p class="text-xs text-yellow-500">Save both the Google Client ID and Client Secret above before connecting.</p>
                 @endif
             </div>
 
@@ -201,7 +205,7 @@
                 </div>
                 <div>
                     <h2 class="text-sm font-semibold text-white">Google Sheets</h2>
-                    @if(!empty($integrationConfig['google_sheets']['token']['access_token']))
+                    @if($integrationStatus['google_sheets']['connected'] ?? false)
                         <p class="text-xs text-emerald-400 mt-0.5">✓ Connected</p>
                     @else
                         <p class="text-xs text-gray-600 mt-0.5">Not connected</p>
@@ -227,7 +231,7 @@
                     <div class="col-span-2">
                         <label class="block text-xs text-gray-500 mb-1">
                             Spreadsheet ID
-                            @if(!empty($integrationConfig['google_sheets']['token']['access_token']) && empty($integrationConfig['google_sheets']['spreadsheet_id']))
+                            @if(($integrationStatus['google_sheets']['connected'] ?? false) && empty($integrationConfig['google_sheets']['spreadsheet_id']))
                                 <span class="text-yellow-400 ml-1">← required to activate sync</span>
                             @endif
                         </label>
@@ -235,7 +239,7 @@
                                @if(!$managedByAdmin) disabled @endif
                                value="{{ old('google_sheets.spreadsheet_id', $integrationConfig['google_sheets']['spreadsheet_id'] ?? '') }}"
                                placeholder="From spreadsheet URL: /d/{SPREADSHEET_ID}/edit"
-                               class="w-full bg-gray-800 border {{ (empty($integrationConfig['google_sheets']['spreadsheet_id']) && !empty($integrationConfig['google_sheets']['token']['access_token'])) ? 'border-yellow-500/60' : 'border-gray-700' }} text-gray-100 text-sm rounded-lg px-3 py-2
+                               class="w-full bg-gray-800 border {{ (empty($integrationConfig['google_sheets']['spreadsheet_id']) && ($integrationStatus['google_sheets']['connected'] ?? false)) ? 'border-yellow-500/60' : 'border-gray-700' }} text-gray-100 text-sm rounded-lg px-3 py-2
                                       focus:ring-indigo-500 focus:border-indigo-500">
                         <p class="text-xs text-gray-600 mt-1">
                             Open your Google Sheet — the ID is in the URL between <span class="font-mono">/d/</span> and <span class="font-mono">/edit</span>.
@@ -260,7 +264,7 @@
             </form>
 
             <div class="pt-3 border-t border-gray-800 flex items-center gap-3">
-                @if(!empty($integrationConfig['google_credentials']['client_id']) && $managedByAdmin)
+                @if(!empty($googleCredentials['client_id']) && ($googleCredentials['client_secret_configured'] ?? false) && $managedByAdmin)
                     <a href="{{ route('settings.integrations.oauth.redirect', 'google_sheets') }}"
                        class="flex items-center gap-2 px-4 py-2 bg-white/10 hover:bg-white/20 text-white text-sm rounded-lg transition-colors border border-gray-700">
                         <svg class="w-4 h-4" viewBox="0 0 24 24">
@@ -269,10 +273,10 @@
                             <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
                             <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
                         </svg>
-                        {{ !empty($integrationConfig['google_sheets']['token']['access_token']) ? 'Reconnect Google Account' : 'Connect Google Account' }}
+                        {{ ($integrationStatus['google_sheets']['connected'] ?? false) ? 'Reconnect Google Account' : 'Connect Google Account' }}
                     </a>
                 @else
-                    <p class="text-xs text-yellow-500">Save your Google Client ID above before connecting.</p>
+                    <p class="text-xs text-yellow-500">Save both the Google Client ID and Client Secret above before connecting.</p>
                 @endif
             </div>
 

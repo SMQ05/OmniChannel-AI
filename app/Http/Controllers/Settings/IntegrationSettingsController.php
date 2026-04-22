@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Settings;
 
 use App\Http\Controllers\Controller;
+use App\Models\Business;
 use App\Services\Google\GoogleCalendarService;
 use App\Services\Google\GoogleSheetsService;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -20,7 +21,7 @@ use Illuminate\View\View;
  *
  * Handles OAuth authorization code flow:
  *  1. oauthRedirect() — builds the Google OAuth consent URL and redirects the user.
- *  2. oauthCallback() — exchanges the auth code for tokens, persists to integration_config.
+ *  2. oauthCallback() — exchanges the auth code for tokens and persists them to encrypted storage.
  *
  * Test endpoints create then immediately delete/undo a test record to verify connectivity.
  */
@@ -43,12 +44,20 @@ class IntegrationSettingsController extends Controller
      */
     public function edit(Request $request): View
     {
-        $business           = $request->user()->business;
-        $integrationConfig  = $business->integration_config ?? [];
+        $business = $request->user()->business;
+        $integrationConfig = $business->integration_config ?? [];
 
         return view('settings.integrations', [
-            'business'          => $business,
+            'business' => $business,
             'integrationConfig' => $integrationConfig,
+            'googleCredentials' => [
+                'client_id' => $business->googleOauthClientId(),
+                'client_secret_configured' => trim((string) ($business->googleOauthCredentials()['client_secret'] ?? '')) !== '',
+            ],
+            'integrationStatus' => [
+                'google_calendar' => ['connected' => $business->googleServiceConnected('google_calendar')],
+                'google_sheets' => ['connected' => $business->googleServiceConnected('google_sheets')],
+            ],
             'managedByAdmin' => $this->managedByAdmin($request),
         ]);
     }
@@ -75,22 +84,36 @@ class IntegrationSettingsController extends Controller
 
         $business = $request->user()->business;
         $existing = $business->integration_config ?? [];
+        $secrets = $business->integration_secrets ?? [];
 
-        // Shared Google OAuth credentials
         if (isset($validated['google_credentials'])) {
-            $existing['google_credentials'] = array_merge(
-                $existing['google_credentials'] ?? [],
-                array_filter($validated['google_credentials'], fn ($v) => $v !== null && $v !== '')
-            );
+            $clientId = trim((string) ($validated['google_credentials']['client_id'] ?? ''));
+            $clientSecret = trim((string) ($validated['google_credentials']['client_secret'] ?? ''));
+
+            if ($clientId !== '') {
+                $existing['google_credentials'] = array_filter([
+                    'client_id' => $clientId,
+                ], static fn (mixed $value): bool => is_string($value) ? trim($value) !== '' : filled($value));
+            }
+
+            if ($clientSecret !== '') {
+                $googleCredentials = $secrets['google_credentials'] ?? [];
+                $googleCredentials['client_secret'] = $clientSecret;
+                $secrets['google_credentials'] = $googleCredentials;
+            }
         }
 
         foreach (['google_calendar', 'google_sheets'] as $service) {
             if (isset($validated[$service])) {
+                unset($existing[$service]['token']);
                 $existing[$service] = array_merge($existing[$service] ?? [], $validated[$service]);
             }
         }
 
+        unset($existing['google_credentials']['client_secret']);
+
         $business->integration_config = $existing;
+        $business->integration_secrets = $secrets;
         $business->save();
 
         return redirect()->route('settings.integrations')->with('success', 'Integration settings saved.');
@@ -112,11 +135,8 @@ class IntegrationSettingsController extends Controller
 
         abort_if(!in_array($service, ['google_calendar', 'google_sheets'], true), 400);
 
-        $business    = $request->user()->business;
-        $config      = $business->integration_config ?? [];
-
-        // Credentials are shared across both Google services
-        $clientId = $config['google_credentials']['client_id'] ?? '';
+        $business = $request->user()->business;
+        $clientId = $business->googleOauthClientId();
 
         if ($clientId === '') {
             return redirect()->route('settings.integrations')
@@ -142,7 +162,7 @@ class IntegrationSettingsController extends Controller
      * Handle the OAuth callback from Google.
      *
      * Exchanges the authorization code for access + refresh tokens and persists
-     * them to businesses.integration_config[$service]['token'].
+     * them to businesses.integration_secrets[$service]['token'].
      *
      * @param  Request  $request
      * @return RedirectResponse
@@ -160,8 +180,9 @@ class IntegrationSettingsController extends Controller
                 ->withErrors(['oauth' => 'OAuth callback failed: missing state or code.']);
         }
 
-        $business    = \App\Models\Business::findOrFail($businessId);
-        $credentials = $business->integration_config['google_credentials'] ?? [];
+        /** @var Business $business */
+        $business = Business::findOrFail($businessId);
+        $credentials = $business->googleOauthCredentials();
 
         try {
             $response = Http::asForm()->post(self::GOOGLE_TOKEN_URL, [
@@ -178,16 +199,21 @@ class IntegrationSettingsController extends Controller
 
             $tokenData = $response->json();
 
-            $config = $business->integration_config;
-            $config[$service]['token'] = [
+            $config = $business->integration_config ?? [];
+            $secrets = $business->integration_secrets ?? [];
+            $serviceSecrets = $secrets[$service] ?? [];
+            $serviceSecrets['token'] = [
                 'access_token'  => $tokenData['access_token']  ?? '',
                 'refresh_token' => $tokenData['refresh_token'] ?? '',
                 'expires_at'    => time() + (int) ($tokenData['expires_in'] ?? 3600),
             ];
+            $secrets[$service] = $serviceSecrets;
             // Auto-enable the service now that it's connected
             $config[$service]['enabled'] = true;
+            unset($config[$service]['token']);
 
             $business->integration_config = $config;
+            $business->integration_secrets = $secrets;
             $business->save();
         } catch (\Throwable $e) {
             Log::error('IntegrationSettingsController: OAuth callback failed.', [
