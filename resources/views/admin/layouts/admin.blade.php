@@ -5,10 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>Admin — {{ $title ?? 'Super Admin' }} — {{ config('app.name') }}</title>
-
+    <script>
+        (() => {
+            const theme = localStorage.getItem('kynex-theme') || 'light';
+            document.documentElement.classList.toggle('dark', theme === 'dark');
+            document.documentElement.dataset.theme = theme === 'dark' ? 'dark' : 'light';
+        })();
+    </script>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
-<body class="h-full bg-gray-950 text-gray-100 antialiased" x-data>
+<body class="h-full antialiased" x-data>
 
 <div class="flex h-full">
 
@@ -29,15 +35,28 @@
             @php
                 $navItems = [
                     ['route' => 'admin.dashboard',        'label' => 'Overview'],
-                    ['route' => 'admin.businesses.index', 'label' => 'All Businesses'],
+                    ['route' => 'admin.businesses.index', 'label' => 'Businesses'],
                     ['route' => 'admin.plans.index',      'label' => 'Plans'],
+                    ['route' => 'admin.billing.index',    'label' => 'Billing'],
                     ['route' => 'admin.voice.index',      'label' => 'Voice'],
-                    ['route' => 'admin.llm-keys.index',   'label' => 'LLM API Keys'],
+                    ['route' => 'admin.llm-keys.index',   'label' => 'LLM Keys'],
                 ];
 
                 if (config('queue.default') === 'redis') {
                     $navItems[] = ['route' => 'admin.horizon', 'label' => 'Horizon (Queues)'];
                 }
+
+                // Phase 7: Admin Control Plane
+                $controlPlaneNav = [
+                    ['route' => 'admin.onboarding.index',    'label' => 'Onboarding'],
+                    ['route' => 'admin.incidents.index',     'label' => 'Incidents'],
+                    ['route' => 'admin.credentials.index',   'label' => 'Credentials'],
+                    ['route' => 'admin.ai-policy.index',     'label' => 'AI Policy'],
+                    ['route' => 'admin.support.index',       'label' => 'Support'],
+                    ['route' => 'admin.audit-logs.index',    'label' => 'Audit Logs'],
+                    ['route' => 'admin.monitoring.index',    'label' => 'Monitoring'],
+                    ['route' => 'admin.compliance.index',    'label' => 'Compliance'],
+                ];
             @endphp
 
             @foreach($navItems as $item)
@@ -49,6 +68,29 @@
                     {{ $item['label'] }}
                 </a>
             @endforeach
+        </nav>
+
+        {{-- Phase 7: Admin Control Plane Navigation (Collapsible) --}}
+        <nav class="py-4 px-3 space-y-1 border-t border-red-900/40">
+            <details class="group">
+                <summary class="flex items-center px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer group-open:rotate-180 transition-transform">
+                    Control Plane
+                    <svg class="ml-auto w-4 h-4 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                    </svg>
+                </summary>
+                <div class="mt-2 space-y-1 pl-3">
+                    @foreach($controlPlaneNav as $item)
+                        <a href="{{ route($item['route']) }}"
+                           class="flex items-center px-3 py-2 rounded text-xs font-medium transition-colors
+                                  {{ request()->routeIs($item['route'])
+                                     ? 'bg-red-600/10 text-red-400'
+                                     : 'text-gray-500 hover:text-gray-300 hover:bg-gray-800' }}">
+                            {{ $item['label'] }}
+                        </a>
+                    @endforeach
+                </div>
+            </details>
         </nav>
 
         {{-- Back to tenant dashboard --}}
@@ -70,7 +112,7 @@
                 </div>
                 <form method="POST" action="{{ route('logout') }}">
                     @csrf
-                    <button type="submit" class="text-gray-500 hover:text-white transition-colors" title="Sign out">
+                    <button type="submit" class="text-[var(--text-muted)] hover:text-[var(--text-strong)] transition-colors" title="Sign out">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                   d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
@@ -107,7 +149,7 @@
         @endif
 
         <main class="flex-1 overflow-y-auto p-6">
-            {{ $slot }}
+            @yield('content')
         </main>
     </div>
 </div>
