@@ -2,6 +2,8 @@
 /.vscode
 /vendor
 /node_modules
+/services/voice-gateway/node_modules
+/services/voice-gateway/dist
 /.phpunit.cache
 /storage/*.key
 /storage/app/public
