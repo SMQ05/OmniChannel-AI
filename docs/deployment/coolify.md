@@ -92,7 +92,7 @@ Set only on the PHP-FPM app service when you want a one-time schema rollout:
 
 - PHP-FPM app service listens on port `9000`
 - Queue worker runs:
-  `php artisan queue:work database --queue=webhooks,integrations,reminders --sleep=1 --tries=3 --timeout=60 --max-time=3600`
+  `php artisan queue:work database --queue=webhooks,integrations,reminders,billing --sleep=1 --tries=3 --timeout=60 --max-time=3600`
 - Scheduler runs:
   `php artisan schedule:work`
 - Nginx handles HTTP on port `80` and forwards PHP requests to the internal app service

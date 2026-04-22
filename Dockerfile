@@ -6,7 +6,7 @@ ENV APP_ENV=production
 ENV LOG_CHANNEL=stderr
 ENV LOG_LEVEL=error
 ENV QUEUE_CONNECTION=database
-ENV QUEUE_NAMES=webhooks,integrations,reminders
+ENV QUEUE_NAMES=webhooks,integrations,reminders,billing
 
 RUN apk add --no-cache \
     git \

@@ -4,7 +4,7 @@ set -eu
 /usr/local/bin/bootstrap-runtime
 
 exec su-exec www-data php artisan queue:work "${QUEUE_CONNECTION:-database}" \
-    --queue="${QUEUE_NAMES:-webhooks,integrations,reminders}" \
+    --queue="${QUEUE_NAMES:-webhooks,integrations,reminders,billing}" \
     --sleep=1 \
     --tries=3 \
     --timeout="${QUEUE_TIMEOUT:-60}" \

@@ -27,7 +27,7 @@ services:
     env: php
     plan: starter
     buildCommand: composer install --no-dev --optimize-autoloader
-    startCommand: php artisan queue:work ${QUEUE_CONNECTION} --queue=webhooks,integrations,reminders --sleep=1 --tries=3 --timeout=60 --max-time=3600
+    startCommand: php artisan queue:work ${QUEUE_CONNECTION} --queue=webhooks,integrations,reminders,billing --sleep=1 --tries=3 --timeout=60 --max-time=3600
 
   - type: worker
     name: kynex-omnichannel-ai-scheduler
