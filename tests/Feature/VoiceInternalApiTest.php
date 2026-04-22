@@ -6,7 +6,10 @@ namespace Tests\Feature;
 
 use App\Models\Business;
 use App\Models\BusinessSubscription;
+use App\Models\Appointment;
+use App\Models\Patient;
 use App\Models\Plan;
+use App\Models\Provider;
 use App\Models\VoiceChannel;
 use App\Models\VoiceEvent;
 use App\Models\VoiceSession;
@@ -138,14 +141,145 @@ class VoiceInternalApiTest extends TestCase
         );
     }
 
+    public function test_voice_tools_do_not_expose_or_modify_other_tenant_records(): void
+    {
+        [$business, $voiceChannel] = $this->seedVoiceBusiness();
+        [$otherBusiness] = $this->seedVoiceBusiness('other-tenant');
+
+        $localPatient = Patient::query()->create([
+            'business_id' => $business->id,
+            'name' => 'Local Patient',
+            'phone' => '+15550001000',
+            'platform_user_id' => '+15550001000',
+            'platform' => 'voice',
+        ]);
+
+        $foreignPatient = Patient::query()->create([
+            'business_id' => $otherBusiness->id,
+            'name' => 'Foreign Patient',
+            'phone' => '+15559990000',
+            'platform_user_id' => '+15559990000',
+            'platform' => 'voice',
+        ]);
+
+        $foreignProvider = Provider::query()->create([
+            'business_id' => $otherBusiness->id,
+            'name' => 'Foreign Provider',
+            'working_hours' => ['monday' => ['active' => true, 'start' => '09:00', 'end' => '17:00']],
+            'slot_duration_minutes' => 30,
+            'is_active' => true,
+        ]);
+
+        $foreignAppointment = Appointment::query()->create([
+            'business_id' => $otherBusiness->id,
+            'provider_id' => $foreignProvider->id,
+            'patient_id' => $foreignPatient->id,
+            'service_type' => 'Foreign Booking',
+            'start_time' => now()->addDay(),
+            'end_time' => now()->addDay()->addMinutes(30),
+            'status' => 'confirmed',
+            'booked_via' => 'voice',
+        ]);
+
+        $voiceSession = VoiceSession::query()->create([
+            'uuid' => (string) \Illuminate\Support\Str::uuid(),
+            'business_id' => $business->id,
+            'voice_channel_id' => $voiceChannel->id,
+            'patient_id' => $localPatient->id,
+            'provider' => 'telnyx',
+            'status' => 'initiated',
+            'from_number' => '+15550001000',
+            'to_number' => $voiceChannel->phone_number,
+            'initiated_at' => now(),
+            'last_activity_at' => now(),
+        ]);
+
+        $lookup = $this->withHeader('X-Voice-Gateway-Secret', 'test-shared-secret')
+            ->postJson('/api/internal/voice/tools/lookup_patient', [
+                'voice_session_id' => $voiceSession->id,
+                'payload' => ['patient_id' => $foreignPatient->id],
+            ]);
+
+        $lookup->assertOk()
+            ->assertJsonPath('result.ok', true)
+            ->assertJsonPath('result.found', false);
+
+        $cancel = $this->withHeaders([
+            'X-Voice-Gateway-Secret' => 'test-shared-secret',
+            'X-Idempotency-Key' => 'tenant-isolation-cancel',
+        ])->postJson('/api/internal/voice/tools/cancel_appointment', [
+            'voice_session_id' => $voiceSession->id,
+            'payload' => ['appointment_id' => $foreignAppointment->id],
+        ]);
+
+        $cancel->assertOk()
+            ->assertJsonPath('result.ok', false)
+            ->assertJsonPath('result.error', 'No appointment could be found to cancel.');
+
+        $book = $this->withHeaders([
+            'X-Voice-Gateway-Secret' => 'test-shared-secret',
+            'X-Idempotency-Key' => 'tenant-isolation-book',
+        ])->postJson('/api/internal/voice/tools/book_appointment', [
+            'voice_session_id' => $voiceSession->id,
+            'payload' => [
+                'patient_id' => $localPatient->id,
+                'provider_id' => $foreignProvider->id,
+                'date' => now()->addDay()->toDateString(),
+                'time' => '10:00',
+                'service_type' => 'Consultation',
+            ],
+        ]);
+
+        $book->assertOk()
+            ->assertJsonPath('result.ok', false)
+            ->assertJsonPath('result.error', 'Provider or patient could not be resolved.');
+
+        $this->assertSame('confirmed', $foreignAppointment->fresh()->status);
+    }
+
+    public function test_start_session_does_not_reuse_patient_from_other_tenant_by_phone(): void
+    {
+        [$business, $voiceChannel] = $this->seedVoiceBusiness();
+        [$otherBusiness] = $this->seedVoiceBusiness('voice-other');
+
+        $foreignPatient = Patient::query()->create([
+            'business_id' => $otherBusiness->id,
+            'name' => 'Foreign Voice Patient',
+            'phone' => '+15550001000',
+            'platform_user_id' => '+15550001000',
+            'platform' => 'voice',
+        ]);
+
+        $response = $this->withHeader('X-Voice-Gateway-Secret', 'test-shared-secret')
+            ->postJson('/api/internal/voice/sessions/start', [
+                'voice_channel_id' => $voiceChannel->id,
+                'provider' => 'telnyx',
+                'provider_call_id' => 'call-tenant-phone',
+                'transport_stream_id' => 'stream-tenant-phone',
+                'direction' => 'inbound',
+                'from_number' => '+15550001000',
+                'to_number' => $voiceChannel->phone_number,
+            ]);
+
+        $response->assertOk()->assertJsonPath('accepted', true);
+
+        $localSession = VoiceSession::query()->where('provider_call_id', 'call-tenant-phone')->firstOrFail();
+        $localPatient = Patient::query()->findOrFail((int) $localSession->patient_id);
+
+        $this->assertNotSame($foreignPatient->id, $localPatient->id);
+        $this->assertSame($business->id, $localPatient->business_id);
+        $this->assertSame($foreignPatient->id, $foreignPatient->fresh()->id);
+    }
+
     /**
      * @return array{0: Business, 1: VoiceChannel}
      */
-    private function seedVoiceBusiness(): array
+    private function seedVoiceBusiness(?string $slug = null): array
     {
+        $suffix = $slug ?? 'voice-clinic';
         $plan = Plan::query()->create([
-            'code' => 'voice-test',
-            'name' => 'Voice Test',
+            'code' => 'voice-test-' . $suffix,
+            'name' => 'Voice Test ' . $suffix,
             'description' => 'Test plan',
             'included_quotas' => ['voice_minutes' => 120],
             'feature_flags' => ['voice_agent' => true],
@@ -153,9 +287,9 @@ class VoiceInternalApiTest extends TestCase
         ]);
 
         $business = Business::query()->create([
-            'name' => 'Voice Clinic',
+            'name' => 'Voice Clinic ' . $suffix,
             'business_type' => 'clinic',
-            'slug' => 'voice-clinic',
+            'slug' => $suffix,
             'timezone' => 'UTC',
             'locale' => 'en',
             'channel_config' => [
@@ -194,7 +328,7 @@ class VoiceInternalApiTest extends TestCase
         $voiceChannel = VoiceChannel::query()->create([
             'business_id' => $business->id,
             'provider' => 'telnyx',
-            'phone_number' => '+15551234567',
+            'phone_number' => '+1555' . str_pad((string) random_int(100000, 999999), 6, '0', STR_PAD_LEFT),
             'config' => ['label' => 'Main Front Desk'],
             'is_enabled' => true,
         ]);
