@@ -4,6 +4,19 @@ This runbook defines the minimum operating standard for a controlled pilot relea
 
 ## Release Steps
 
+Pre-release compatibility check for the secrets rollout:
+
+```bash
+php scripts/ops/rollout_smoke_check.php
+```
+
+Expected result:
+
+- legacy plaintext secret keys are scrubbed from `businesses.integration_config`
+- live Google secrets move into `businesses.integration_secrets`
+- live WhatsApp and Messenger secrets move into `messaging_channel_connections.credentials`
+- only non-secret runtime fields remain in legacy JSON blobs
+
 1. Confirm CI passed on the release branch.
 2. Confirm `php artisan test` passed against the release candidate.
 3. Confirm `npm run build` passed for the web app and `services/voice-gateway`.
@@ -27,7 +40,11 @@ php artisan ops:smoke --strict-runtime --max-failed-jobs=0
    - scheduler reminders and billing heartbeats are fresh
    - no failed jobs
    - billing cycle command is registered
-8. Send one live inbound message through an enabled tenant channel and confirm webhook ingest, async processing, and outbound response.
+8. Verify one already-migrated tenant in the target environment:
+   - confirm Google and channel integrations still show connected/ready state
+   - confirm the migrated tenant no longer depends on plaintext secrets in legacy config blobs
+   - confirm one inbound message still reaches webhook ingest, async processing, and outbound response
+9. Send one live inbound message through an enabled tenant channel and confirm webhook ingest, async processing, and outbound response.
 
 ## Rollback
 
