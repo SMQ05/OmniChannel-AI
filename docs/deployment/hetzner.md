@@ -238,6 +238,7 @@ docker compose -f docker-compose.prod.yml ps
 docker compose -f docker-compose.prod.yml exec app php artisan about
 docker compose -f docker-compose.prod.yml exec app php artisan migrate:status
 docker compose -f docker-compose.prod.yml exec app php artisan queue:failed
+docker compose -f docker-compose.prod.yml exec app php artisan ops:smoke --strict-runtime --max-failed-jobs=0
 docker compose -f docker-compose.prod.yml exec app php artisan schedule:list
 docker compose -f docker-compose.prod.yml exec app php artisan route:list --path=api/webhook
 ```
@@ -333,3 +334,5 @@ CACHE_STORE=redis
 4. expose `/horizon` only behind authenticated admin access
 
 Do not switch until you are ready to operate Redis as part of production.
+
+See `docs/deployment/pilot-operations-runbook.md` for rollback, backup, restore, and alerting requirements.

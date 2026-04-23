@@ -55,7 +55,7 @@ If you enable Redis on Render, switch queue/cache env vars accordingly and provi
 11. Hit the public health endpoint:
    `GET https://your-app.onrender.com/api/health`
 12. Run the smoke command in the Render shell:
-   `php artisan ops:smoke --url=https://your-app.onrender.com/api/health`
+   `php artisan ops:smoke --url=https://your-app.onrender.com/api/health --strict-runtime --max-failed-jobs=0`
 13. Inspect queue failures if needed:
    `php artisan queue:failed`
 14. Retry failures if needed:
@@ -75,9 +75,11 @@ If you enable Redis on Render, switch queue/cache env vars accordingly and provi
 Run these after every Render deploy until the system is stable:
 
 1. `php artisan migrate --force`
-2. `php artisan ops:smoke --url=https://your-app.onrender.com/api/health`
+2. `php artisan ops:smoke --url=https://your-app.onrender.com/api/health --strict-runtime --max-failed-jobs=0`
 3. `php artisan queue:failed`
 4. `php artisan schedule:list`
 5. Open `/settings/diagnostics`
 6. Send a live WhatsApp message through Meta and confirm:
    inbound webhook row created, async job processed, outbound attempt recorded, reply delivered
+
+See `docs/deployment/pilot-operations-runbook.md` for rollback, backup, restore, and alerting requirements.
