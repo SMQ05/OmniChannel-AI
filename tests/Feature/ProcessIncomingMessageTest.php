@@ -102,7 +102,7 @@ class ProcessIncomingMessageTest extends TestCase
         });
 
         $this->app->instance(AppointmentOrchestrator::class, new class extends AppointmentOrchestrator {
-            public function execute(\App\Models\Business $business, \App\Models\Patient $patient, \App\Models\ConversationLog $conversationLog, array $agentResponse, string $channel): string
+            public function execute(\App\Models\Business $business, \App\Models\Patient $patient, \App\Models\ConversationLog $conversationLog, array $agentResponse, string $channel, array $context = []): string
             {
                 return 'Thanks for your message.';
             }
@@ -312,7 +312,7 @@ class ProcessIncomingMessageTest extends TestCase
         });
 
         $this->app->instance(AppointmentOrchestrator::class, new class extends AppointmentOrchestrator {
-            public function execute(\App\Models\Business $business, \App\Models\Patient $patient, \App\Models\ConversationLog $conversationLog, array $agentResponse, string $channel): string
+            public function execute(\App\Models\Business $business, \App\Models\Patient $patient, \App\Models\ConversationLog $conversationLog, array $agentResponse, string $channel, array $context = []): string
             {
                 return 'Scoped reply.';
             }
