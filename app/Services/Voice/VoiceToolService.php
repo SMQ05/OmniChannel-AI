@@ -11,12 +11,12 @@ use App\Models\Patient;
 use App\Models\Provider;
 use App\Models\VoiceEvent;
 use App\Models\VoiceSession;
+use App\Services\Appointments\BookingLifecycleService;
 use App\Services\Messaging\OutboundMessageService;
 use App\Services\Operations\BusinessServiceCatalog;
 use App\Services\SlotCalculatorService;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\DB;
 
 class VoiceToolService
 {
@@ -24,6 +24,7 @@ class VoiceToolService
         private readonly SlotCalculatorService $slotCalculatorService,
         private readonly OutboundMessageService $outboundMessageService,
         private readonly BusinessServiceCatalog $businessServiceCatalog,
+        private readonly BookingLifecycleService $bookingLifecycleService,
     ) {}
 
     /**
@@ -128,33 +129,17 @@ class VoiceToolService
         }
 
         try {
-            $appointment = DB::transaction(function () use ($business, $provider, $patient, $payload, $startUtc, $endUtc): Appointment {
-                $conflict = Appointment::withoutGlobalScope(\App\Models\Concerns\TenantScope::class)
-                    ->where('business_id', $business->id)
-                    ->where('provider_id', $provider->id)
-                    ->whereIn('status', ['pending', 'confirmed'])
-                    ->where('start_time', '<', $endUtc)
-                    ->where('end_time', '>', $startUtc)
-                    ->lockForUpdate()
-                    ->exists();
-
-                if ($conflict) {
-                    throw new \RuntimeException('slot_taken');
-                }
-
-                return Appointment::query()->create([
-                    'business_id' => $business->id,
-                    'provider_id' => $provider->id,
-                    'patient_id' => $patient->id,
-                    'service_id' => $service?->id,
-                    'service_type' => $service?->name ?? (string) ($payload['service_type'] ?? 'Appointment'),
-                    'start_time' => $startUtc,
-                    'end_time' => $endUtc,
-                    'status' => 'confirmed',
-                    'booked_via' => 'voice',
-                    'notes' => $payload['notes'] ?? null,
-                ]);
-            });
+            $result = $this->bookingLifecycleService->book(
+                business: $business,
+                patient: $patient,
+                provider: $provider,
+                service: $service,
+                startUtc: $startUtc,
+                endUtc: $endUtc,
+                sourceChannel: 'voice',
+                idempotencyKey: (string) ($payload['idempotency_key'] ?? sprintf('voice-book:%d:%s:%s', $voiceSession->id, $startUtc->toISOString(), $provider->id)),
+                context: ['voice_session_id' => $voiceSession->id],
+            );
         } catch (\RuntimeException $exception) {
             if ($exception->getMessage() === 'slot_taken') {
                 return ['ok' => false, 'error' => 'That time slot is no longer available.'];
@@ -165,10 +150,11 @@ class VoiceToolService
 
         return [
             'ok' => true,
-            'appointment_id' => $appointment->id,
-            'status' => $appointment->status,
-            'start_time' => $appointment->start_time?->toISOString(),
-            'end_time' => $appointment->end_time?->toISOString(),
+            'appointment_id' => $result['appointment_id'] ?? null,
+            'status' => $result['status'] ?? 'confirmed',
+            'start_time' => $result['start_time'] ?? null,
+            'end_time' => $result['end_time'] ?? null,
+            'confirmation' => $result['reply_text'] ?? null,
         ];
     }
 
@@ -184,23 +170,53 @@ class VoiceToolService
             return ['ok' => false, 'error' => 'No appointment could be found to reschedule.'];
         }
 
-        $booked = $this->bookAppointment($voiceSession, array_merge($payload, [
-            'patient_id' => $current->patient_id,
-            'provider_id' => $payload['provider_id'] ?? $current->provider_id,
+        $provider = $this->resolveProvider($voiceSession->business, (int) ($payload['provider_id'] ?? $current->provider_id));
+        $service = $this->resolveService($voiceSession->business, $provider, [
             'service_id' => $payload['service_id'] ?? $current->service_id,
             'service_type' => $payload['service_type'] ?? $current->service_type,
-        ]));
+        ]);
 
-        if (!($booked['ok'] ?? false)) {
-            return $booked;
+        if ($provider === null) {
+            return ['ok' => false, 'error' => 'Provider or patient could not be resolved.'];
         }
 
-        $current->forceFill(['status' => 'cancelled'])->save();
+        [$startUtc, $endUtc] = $this->buildUtcWindow(
+            $voiceSession->business,
+            $provider,
+            (string) ($payload['date'] ?? ''),
+            (string) ($payload['time'] ?? ''),
+            $service,
+        );
+
+        if ($startUtc === null || $endUtc === null) {
+            return ['ok' => false, 'error' => 'Booking date or time is invalid.'];
+        }
+
+        try {
+            $result = $this->bookingLifecycleService->reschedule(
+                business: $voiceSession->business,
+                currentAppointment: $current,
+                provider: $provider,
+                service: $service,
+                newStartUtc: $startUtc,
+                newEndUtc: $endUtc,
+                sourceChannel: 'voice',
+                idempotencyKey: (string) ($payload['idempotency_key'] ?? sprintf('voice-reschedule:%d:%d', $voiceSession->id, $current->id)),
+                context: ['voice_session_id' => $voiceSession->id],
+            );
+        } catch (\RuntimeException $exception) {
+            if ($exception->getMessage() === 'slot_taken') {
+                return ['ok' => false, 'error' => 'That time slot is no longer available.'];
+            }
+
+            throw $exception;
+        }
 
         return [
             'ok' => true,
-            'cancelled_appointment_id' => $current->id,
-            'replacement_appointment_id' => $booked['appointment_id'] ?? null,
+            'cancelled_appointment_id' => $result['cancelled_appointment_id'] ?? $current->id,
+            'replacement_appointment_id' => $result['appointment_id'] ?? null,
+            'confirmation' => $result['reply_text'] ?? null,
         ];
     }
 
@@ -216,12 +232,19 @@ class VoiceToolService
             return ['ok' => false, 'error' => 'No appointment could be found to cancel.'];
         }
 
-        $appointment->forceFill(['status' => 'cancelled'])->save();
+        $result = $this->bookingLifecycleService->cancel(
+            business: $voiceSession->business,
+            appointment: $appointment,
+            sourceChannel: 'voice',
+            idempotencyKey: (string) ($payload['idempotency_key'] ?? sprintf('voice-cancel:%d:%d', $voiceSession->id, $appointment->id)),
+            context: ['voice_session_id' => $voiceSession->id],
+        );
 
         return [
             'ok' => true,
-            'appointment_id' => $appointment->id,
-            'status' => $appointment->status,
+            'appointment_id' => $result['appointment_id'] ?? $appointment->id,
+            'status' => $result['status'] ?? 'cancelled',
+            'confirmation' => $result['reply_text'] ?? null,
         ];
     }
 

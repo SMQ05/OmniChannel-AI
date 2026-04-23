@@ -204,6 +204,11 @@ class ProcessIncomingMessage implements ShouldQueue
                 conversationLog: $conversationLog,
                 agentResponse: $agentResponse,
                 channel: $channel,
+                context: [
+                    'idempotency_key' => sprintf('inbound:%d:%s', $webhook->id, $agentResponse['intent'] ?? 'faq'),
+                    'inbound_webhook_id' => $webhook->id,
+                    'correlation_id' => $webhook->correlation_id,
+                ],
             );
 
             $conversationLog->appendMessage('assistant', $replyText);

@@ -8,6 +8,7 @@ use App\Models\Appointment;
 use App\Queue\Attributes\Backoff;
 use App\Queue\Attributes\Tries;
 use App\Queue\Concerns\InteractsWithQueueAttributes;
+use App\Services\Appointments\AppointmentNotificationService;
 use App\Services\Messaging\OutboundMessageService;
 use App\Services\Billing\BillingLifecycleService;
 use App\Services\Queue\QueueRouteResolver;
@@ -42,6 +43,7 @@ class SendReminderJob implements ShouldQueue
 
     public function handle(
         OutboundMessageService $outboundMessageService,
+        AppointmentNotificationService $appointmentNotificationService,
         WorkerHeartbeatService $workerHeartbeatService,
         UsageMeteringService $usageMetering,
         BillingLifecycleService $billingLifecycleService,
@@ -85,15 +87,6 @@ class SendReminderJob implements ShouldQueue
             return;
         }
 
-        if (!in_array($appointment->booked_via, ['whatsapp', 'messenger'], true)) {
-            Log::info('SendReminderJob: appointment booked via unsupported reminder channel, skipping.', [
-                'appointment_id' => $appointment->id,
-                'channel' => $appointment->booked_via,
-            ]);
-
-            return;
-        }
-
         $business = $appointment->business;
 
         if ($billingLifecycleService->blocksReminders($business)) {
@@ -131,30 +124,48 @@ class SendReminderJob implements ShouldQueue
             return;
         }
 
-        $platformUserId = $appointment->patient->platform_user_id;
+        $usageChannel = $appointment->booked_via;
 
-        if ($platformUserId === null || $platformUserId === '') {
-            Log::warning('SendReminderJob: patient is missing platform_user_id, skipping.', [
-                'appointment_id' => $appointment->id,
-                'patient_id' => $appointment->patient->id,
-            ]);
+        if (in_array($appointment->booked_via, ['whatsapp', 'messenger'], true)) {
+            $platformUserId = $appointment->patient->platform_user_id;
 
-            return;
+            if ($platformUserId === null || $platformUserId === '') {
+                Log::warning('SendReminderJob: patient is missing platform_user_id, skipping.', [
+                    'appointment_id' => $appointment->id,
+                    'patient_id' => $appointment->patient->id,
+                ]);
+
+                return;
+            }
+
+            $outboundMessageService->deliver(
+                business: $business,
+                channel: $appointment->booked_via,
+                recipientPlatformId: $platformUserId,
+                message: $message,
+                idempotencyKey: sprintf('reminder:%d:%d', $appointment->id, $this->offsetHours),
+                correlationId: (string) Str::uuid(),
+                meta: [
+                    'type' => 'reminder',
+                    'appointment_id' => $appointment->id,
+                    'offset_hours' => $this->offsetHours,
+                ],
+            );
+        } else {
+            $email = trim((string) ($appointment->patient->email ?? ''));
+
+            if ($email === '') {
+                Log::info('SendReminderJob: appointment has no reminder-capable destination, skipping.', [
+                    'appointment_id' => $appointment->id,
+                    'channel' => $appointment->booked_via,
+                ]);
+
+                return;
+            }
+
+            $appointmentNotificationService->sendLifecycleEmail($appointment, 'reminder');
+            $usageChannel = 'email';
         }
-
-        $outboundMessageService->deliver(
-            business: $business,
-            channel: $appointment->booked_via,
-            recipientPlatformId: $platformUserId,
-            message: $message,
-            idempotencyKey: sprintf('reminder:%d:%d', $appointment->id, $this->offsetHours),
-            correlationId: (string) Str::uuid(),
-            meta: [
-                'type' => 'reminder',
-                'appointment_id' => $appointment->id,
-                'offset_hours' => $this->offsetHours,
-            ],
-        );
 
         $appointment->reminder_sent_at = array_merge(
             $reminderSentAt,
@@ -165,7 +176,7 @@ class SendReminderJob implements ShouldQueue
         $usageMetering->record(
             business: $business,
             metric: 'reminders_sent',
-            channel: $appointment->booked_via,
+            channel: $usageChannel,
             quantity: 1,
             status: 'sent',
             referenceType: Appointment::class,
@@ -176,7 +187,7 @@ class SendReminderJob implements ShouldQueue
         Log::info('SendReminderJob: reminder sent and recorded.', [
             'appointment_id' => $appointment->id,
             'offset_hours' => $this->offsetHours,
-            'channel' => $appointment->booked_via,
+            'channel' => $usageChannel,
         ]);
     }
 
