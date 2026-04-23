@@ -49,9 +49,7 @@ class BillingLifecycleService
 
     public function reactivate(BusinessSubscription $subscription): BusinessSubscription
     {
-        $nextStatus = $subscription->plan?->code === 'trial' || $subscription->business->plan === 'trial'
-            ? 'trial'
-            : 'active';
+        $nextStatus = $this->baseStatus($subscription);
 
         $subscription->forceFill([
             'lifecycle_status' => $nextStatus,
@@ -69,13 +67,11 @@ class BillingLifecycleService
 
     public function refreshFromDocuments(BusinessSubscription $subscription): BusinessSubscription
     {
-        if ($subscription->lifecycle_status === 'suspended') {
+        if (in_array($subscription->lifecycle_status, ['suspended', 'canceled', 'expired'], true)) {
             return $subscription;
         }
 
-        $baseStatus = $subscription->plan?->code === 'trial' || $subscription->business->plan === 'trial'
-            ? 'trial'
-            : 'active';
+        $baseStatus = $this->baseStatus($subscription);
 
         $hasPastDue = $subscription->billingDocuments()
             ->whereIn('status', ['issued', 'partial'])
@@ -112,5 +108,28 @@ class BillingLifecycleService
             : ($subscription->current_period_end
                 ? CarbonImmutable::parse($subscription->current_period_end)
                 : CarbonImmutable::now()->endOfMonth());
+    }
+
+    public function baseStatus(BusinessSubscription $subscription): string
+    {
+        if ($subscription->canceled_at !== null || $subscription->lifecycle_status === 'canceled') {
+            return 'canceled';
+        }
+
+        if ($subscription->ended_at !== null || $subscription->lifecycle_status === 'expired') {
+            return 'expired';
+        }
+
+        if (
+            (bool) $subscription->cancel_at_period_end
+            && $subscription->current_period_end !== null
+            && CarbonImmutable::parse($subscription->current_period_end)->lessThanOrEqualTo(CarbonImmutable::now())
+        ) {
+            return 'expired';
+        }
+
+        return $subscription->plan?->code === 'trial' || $subscription->business->plan === 'trial'
+            ? 'trial'
+            : 'active';
     }
 }

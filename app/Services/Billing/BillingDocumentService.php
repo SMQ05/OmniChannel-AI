@@ -6,6 +6,7 @@ namespace App\Services\Billing;
 
 use App\Models\BillingDocument;
 use App\Models\BillingDocumentLine;
+use App\Models\BillingPrice;
 use App\Models\BillingPriceCreditPolicy;
 use App\Models\BusinessSubscription;
 use Carbon\CarbonImmutable;
@@ -28,6 +29,18 @@ class BillingDocumentService
 
         if ($billingPrice === null) {
             throw new RuntimeException('Billing price is not assigned to this subscription.');
+        }
+
+        if (!$this->shouldRunCycleNow($subscription, $billingPrice)) {
+            $existing = $subscription->billingDocuments()
+                ->with('lines')
+                ->latest('period_end')
+                ->latest('created_at')
+                ->first();
+
+            if ($existing !== null) {
+                return $existing;
+            }
         }
 
         $periodStart = $this->billingLifecycleService->defaultAnchor($subscription);
@@ -226,5 +239,19 @@ class BillingDocumentService
         $line->save();
 
         return $sourceKey;
+    }
+
+    private function shouldRunCycleNow(BusinessSubscription $subscription, BillingPrice $billingPrice): bool
+    {
+        $needsSetupFee = $billingPrice->setup_fee_amount_minor !== null
+            && (int) $billingPrice->setup_fee_amount_minor > 0
+            && $subscription->setup_fee_invoiced_at === null;
+
+        if ($needsSetupFee) {
+            return true;
+        }
+
+        return $subscription->next_invoice_at === null
+            || CarbonImmutable::parse($subscription->next_invoice_at)->lessThanOrEqualTo(CarbonImmutable::now());
     }
 }

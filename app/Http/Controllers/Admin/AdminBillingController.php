@@ -19,6 +19,7 @@ use App\Services\Billing\BillingSummaryService;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
@@ -81,9 +82,26 @@ class AdminBillingController extends Controller
             'provider_metadata' => ['nullable', 'string'],
         ]);
 
+        $providerDriver = $this->emptyToNull($validated['provider_driver'] ?? null);
+        $providerAccountRef = $this->emptyToNull($validated['provider_account_ref'] ?? null);
+
+        if ($providerDriver !== null && $providerAccountRef !== null) {
+            $duplicateExists = DB::table('billing_accounts')
+                ->where('provider_driver', $providerDriver)
+                ->where('provider_account_ref', $providerAccountRef)
+                ->where('business_id', '!=', $business->id)
+                ->exists();
+
+            if ($duplicateExists) {
+                throw ValidationException::withMessages([
+                    'provider_account_ref' => 'That provider account reference is already assigned to another business.',
+                ]);
+            }
+        }
+
         $account = $billingAccountService->ensure($business, [
-            'provider_driver' => $this->emptyToNull($validated['provider_driver'] ?? null),
-            'provider_account_ref' => $this->emptyToNull($validated['provider_account_ref'] ?? null),
+            'provider_driver' => $providerDriver,
+            'provider_account_ref' => $providerAccountRef,
             'currency' => strtoupper((string) $validated['currency']),
             'billing_email' => $this->emptyToNull($validated['billing_email'] ?? null),
             'invoice_email' => $this->emptyToNull($validated['invoice_email'] ?? null),
