@@ -4,13 +4,13 @@ declare(strict_types=1);
 
 namespace App\Services;
 
-use App\Jobs\SyncAppointmentJob;
 use App\Models\Appointment;
 use App\Models\Business;
 use App\Models\BusinessService;
 use App\Models\ConversationLog;
 use App\Models\Patient;
 use App\Models\Provider;
+use App\Services\Appointments\BookingLifecycleService;
 use App\Services\Conversations\HumanHandoffService;
 use App\Services\Operations\BusinessServiceCatalog;
 use Carbon\Carbon;
@@ -54,6 +54,7 @@ class AppointmentOrchestrator
     public function __construct(
         private readonly ?BusinessServiceCatalog $businessServiceCatalog = null,
         private readonly ?HumanHandoffService $humanHandoffService = null,
+        private readonly ?BookingLifecycleService $bookingLifecycleService = null,
     ) {
     }
 
@@ -66,6 +67,7 @@ class AppointmentOrchestrator
      * @param  ConversationLog   $conversationLog The current session (mutated in-place for handoff)
      * @param  AgentResponse     $agentResponse   Parsed AI response
      * @param  string            $channel         'whatsapp' or 'messenger'
+     * @param  array<string, mixed> $context
      * @return string            The reply text to dispatch to the patient
      */
     public function execute(
@@ -74,6 +76,7 @@ class AppointmentOrchestrator
         ConversationLog $conversationLog,
         array $agentResponse,
         string $channel,
+        array $context = [],
     ): string {
         // Escalate to human immediately if the agent flagged needs_human,
         // regardless of the intent value.
@@ -82,9 +85,9 @@ class AppointmentOrchestrator
         }
 
         return match ($agentResponse['intent']) {
-            'book'        => $this->handleBook($business, $patient, $agentResponse),
-            'cancel'      => $this->handleCancel($business, $patient, $agentResponse),
-            'reschedule'  => $this->handleReschedule($business, $patient, $agentResponse),
+            'book'        => $this->handleBook($business, $patient, $agentResponse, $channel, $context),
+            'cancel'      => $this->handleCancel($business, $patient, $agentResponse, $channel, $context),
+            'reschedule'  => $this->handleReschedule($business, $patient, $agentResponse, $channel, $context),
             'handoff'     => $this->handleHandoff($business, $patient, $conversationLog, $agentResponse),
             default       => $agentResponse['reply_text'], // 'faq' and any unknown intent
         };
@@ -111,6 +114,8 @@ class AppointmentOrchestrator
         Business $business,
         Patient $patient,
         array $agentResponse,
+        string $channel,
+        array $context = [],
     ): string {
         if (!$this->hasBookingFields($agentResponse)) {
             Log::warning('AppointmentOrchestrator: book intent missing required fields.', [
@@ -142,34 +147,17 @@ class AppointmentOrchestrator
         );
 
         try {
-            $appointment = DB::transaction(function () use (
-                $business, $patient, $provider, $agentResponse, $startUtc, $endUtc
-            ): Appointment {
-                // Row-level check: re-verify the slot is free under lock
-                $conflict = Appointment::withoutGlobalScope(\App\Models\Concerns\TenantScope::class)
-                    ->where('provider_id', $provider->id)
-                    ->whereIn('status', ['confirmed', 'pending'])
-                    ->where('start_time', '<', $endUtc)
-                    ->where('end_time', '>', $startUtc)
-                    ->lockForUpdate()
-                    ->exists();
-
-                if ($conflict) {
-                    throw new \RuntimeException('slot_taken');
-                }
-
-                return Appointment::create([
-                    'business_id'  => $business->id,
-                    'provider_id'  => $provider->id,
-                    'patient_id'   => $patient->id,
-                    'service_id'   => $service?->id,
-                    'service_type' => $service?->name ?? (string) ($agentResponse['service_type'] ?? 'Appointment'),
-                    'start_time'   => $startUtc,
-                    'end_time'     => $endUtc,
-                    'status'       => 'confirmed',
-                    'booked_via'   => $patient->platform,
-                ]);
-            });
+            $result = ($this->bookingLifecycleService ?? app(BookingLifecycleService::class))->book(
+                business: $business,
+                patient: $patient,
+                provider: $provider,
+                service: $service,
+                startUtc: $startUtc,
+                endUtc: $endUtc,
+                sourceChannel: $channel,
+                idempotencyKey: (string) ($context['idempotency_key'] ?? sprintf('booking:%s:%d', $channel, $patient->id)),
+                context: $context,
+            );
         } catch (\RuntimeException $e) {
             if ($e->getMessage() === 'slot_taken') {
                 Log::info('AppointmentOrchestrator: slot was taken by a concurrent booking.', [
@@ -184,14 +172,7 @@ class AppointmentOrchestrator
             throw $e;
         }
 
-        SyncAppointmentJob::dispatch($appointment);
-
-        Log::info('AppointmentOrchestrator: appointment booked.', [
-            'appointment_id' => $appointment->id,
-            'business_id'    => $business->id,
-        ]);
-
-        return $agentResponse['reply_text'];
+        return (string) ($result['reply_text'] ?? $agentResponse['reply_text']);
     }
 
     /**
@@ -209,6 +190,8 @@ class AppointmentOrchestrator
         Business $business,
         Patient $patient,
         array $agentResponse,
+        string $channel,
+        array $context = [],
     ): string {
         $query = Appointment::withoutGlobalScope(\App\Models\Concerns\TenantScope::class)
             ->where('business_id', $business->id)
@@ -233,16 +216,15 @@ class AppointmentOrchestrator
             return "I couldn't find an upcoming appointment to cancel. Could you give me more details about which appointment you'd like to cancel?";
         }
 
-        $appointment->update(['status' => 'cancelled']);
+        $result = ($this->bookingLifecycleService ?? app(BookingLifecycleService::class))->cancel(
+            business: $business,
+            appointment: $appointment,
+            sourceChannel: $channel,
+            idempotencyKey: (string) ($context['idempotency_key'] ?? sprintf('cancel:%s:%d:%d', $channel, $patient->id, $appointment->id)),
+            context: $context,
+        );
 
-        SyncAppointmentJob::dispatch($appointment);
-
-        Log::info('AppointmentOrchestrator: appointment cancelled.', [
-            'appointment_id' => $appointment->id,
-            'business_id'    => $business->id,
-        ]);
-
-        return $agentResponse['reply_text'];
+        return (string) ($result['reply_text'] ?? $agentResponse['reply_text']);
     }
 
     /**
@@ -260,6 +242,8 @@ class AppointmentOrchestrator
         Business $business,
         Patient $patient,
         array $agentResponse,
+        string $channel,
+        array $context = [],
     ): string {
         if (!$this->hasBookingFields($agentResponse)) {
             return $agentResponse['reply_text'];
@@ -284,71 +268,38 @@ class AppointmentOrchestrator
             durationMinutes: $service?->duration_minutes ?? $provider->slot_duration_minutes,
         );
 
+        $currentAppointment = Appointment::withoutGlobalScope(\App\Models\Concerns\TenantScope::class)
+            ->where('business_id', $business->id)
+            ->where('patient_id', $patient->id)
+            ->where('status', 'confirmed')
+            ->where('start_time', '>', Carbon::now()->utc())
+            ->orderBy('start_time')
+            ->first();
+
+        if ($currentAppointment === null) {
+            return "I couldn't find an existing appointment to reschedule. Could you give me more details?";
+        }
+
         try {
-            [$oldAppointment, $newAppointment] = DB::transaction(function () use (
-                $business, $patient, $provider, $agentResponse, $newStartUtc, $newEndUtc
-            ): array {
-                // Locate the existing appointment to cancel
-                $old = Appointment::withoutGlobalScope(\App\Models\Concerns\TenantScope::class)
-                    ->where('business_id', $business->id)
-                    ->where('patient_id', $patient->id)
-                    ->where('status', 'confirmed')
-                    ->where('start_time', '>', Carbon::now()->utc())
-                    ->orderBy('start_time')
-                    ->lockForUpdate()
-                    ->first();
-
-                if ($old === null) {
-                    throw new \RuntimeException('no_existing_appointment');
-                }
-
-                $old->update(['status' => 'cancelled']);
-
-                // Check the new slot is free
-                $conflict = Appointment::withoutGlobalScope(\App\Models\Concerns\TenantScope::class)
-                    ->where('provider_id', $provider->id)
-                    ->whereIn('status', ['confirmed', 'pending'])
-                    ->where('start_time', '<', $newEndUtc)
-                    ->where('end_time', '>', $newStartUtc)
-                    ->lockForUpdate()
-                    ->exists();
-
-                if ($conflict) {
-                    throw new \RuntimeException('slot_taken');
-                }
-
-                $new = Appointment::create([
-                    'business_id'  => $business->id,
-                    'provider_id'  => $provider->id,
-                    'patient_id'   => $patient->id,
-                    'service_id'   => $service?->id,
-                    'service_type' => $service?->name ?? (string) ($agentResponse['service_type'] ?? $old->service_type),
-                    'start_time'   => $newStartUtc,
-                    'end_time'     => $newEndUtc,
-                    'status'       => 'confirmed',
-                    'booked_via'   => $patient->platform,
-                ]);
-
-                return [$old, $new];
-            });
+            $result = ($this->bookingLifecycleService ?? app(BookingLifecycleService::class))->reschedule(
+                business: $business,
+                currentAppointment: $currentAppointment,
+                provider: $provider,
+                service: $service,
+                newStartUtc: $newStartUtc,
+                newEndUtc: $newEndUtc,
+                sourceChannel: $channel,
+                idempotencyKey: (string) ($context['idempotency_key'] ?? sprintf('reschedule:%s:%d:%d', $channel, $patient->id, $currentAppointment->id)),
+                context: $context,
+            );
         } catch (\RuntimeException $e) {
             return match ($e->getMessage()) {
-                'no_existing_appointment' => "I couldn't find an existing appointment to reschedule. Could you give me more details?",
                 'slot_taken'              => "I'm sorry, that new slot was just taken! Could you choose another time?",
                 default                   => throw $e,
             };
         }
 
-        SyncAppointmentJob::dispatch($oldAppointment);
-        SyncAppointmentJob::dispatch($newAppointment);
-
-        Log::info('AppointmentOrchestrator: appointment rescheduled.', [
-            'old_appointment_id' => $oldAppointment->id,
-            'new_appointment_id' => $newAppointment->id,
-            'business_id'        => $business->id,
-        ]);
-
-        return $agentResponse['reply_text'];
+        return (string) ($result['reply_text'] ?? $agentResponse['reply_text']);
     }
 
     /**
