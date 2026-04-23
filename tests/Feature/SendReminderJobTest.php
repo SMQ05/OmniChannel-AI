@@ -15,6 +15,8 @@ use App\Models\Provider;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Mail;
+use App\Mail\AppointmentLifecycleMail;
 use Tests\TestCase;
 
 class SendReminderJobTest extends TestCase
@@ -165,6 +167,69 @@ class SendReminderJobTest extends TestCase
             'channel' => 'whatsapp',
         ]);
         $this->assertNull($appointment->fresh()->reminder_sent_at);
+    }
+
+    public function test_reminder_job_sends_email_for_voice_bookings_with_patient_email(): void
+    {
+        Mail::fake();
+
+        $business = Business::query()->create([
+            'name' => 'Voice Clinic',
+            'business_type' => 'clinic',
+            'slug' => 'voice-clinic',
+            'timezone' => 'UTC',
+            'locale' => 'en',
+            'channel_config' => [
+                'voice' => [
+                    'enabled' => true,
+                ],
+            ],
+            'integration_config' => [],
+            'reminder_settings' => [
+                'reminders' => [
+                    ['offset_hours' => 24, 'message_template' => 'Reminder for {patient_name} at {time}'],
+                ],
+            ],
+            'ai_config' => [],
+            'is_active' => true,
+            'plan' => 'trial',
+        ]);
+
+        $patient = Patient::query()->create([
+            'business_id' => $business->id,
+            'name' => 'Voice Patient',
+            'platform_user_id' => '+15551239999',
+            'platform' => 'voice',
+            'email' => 'voice.patient@example.com',
+        ]);
+
+        $provider = Provider::query()->create([
+            'business_id' => $business->id,
+            'name' => 'Dr Test',
+            'working_hours' => ['monday' => ['active' => true, 'start' => '09:00', 'end' => '17:00']],
+            'slot_duration_minutes' => 30,
+            'is_active' => true,
+        ]);
+
+        $appointment = Appointment::query()->create([
+            'business_id' => $business->id,
+            'provider_id' => $provider->id,
+            'patient_id' => $patient->id,
+            'service_type' => 'Consultation',
+            'start_time' => now()->addDay(),
+            'end_time' => now()->addDay()->addMinutes(30),
+            'status' => 'confirmed',
+            'booked_via' => 'voice',
+        ]);
+
+        $job = new SendReminderJob($appointment, 24);
+        $this->app->call([$job, 'handle']);
+
+        Mail::assertSent(AppointmentLifecycleMail::class, function (AppointmentLifecycleMail $mail) use ($patient): bool {
+            return $mail->hasTo($patient->email) && $mail->action === 'reminder';
+        });
+        $this->assertSame('sent', DB::table('usage_events')->where('metric', 'reminders_sent')->value('status'));
+        $this->assertSame('email', DB::table('usage_events')->where('metric', 'reminders_sent')->value('channel'));
     }
 
     private function seedWhatsappConnection(Business $business): void

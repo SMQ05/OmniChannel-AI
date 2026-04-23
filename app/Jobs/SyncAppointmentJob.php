@@ -8,8 +8,7 @@ use App\Models\Appointment;
 use App\Queue\Attributes\Backoff;
 use App\Queue\Attributes\Tries;
 use App\Queue\Concerns\InteractsWithQueueAttributes;
-use App\Services\Google\GoogleCalendarService;
-use App\Services\Google\GoogleSheetsService;
+use App\Services\Appointments\AppointmentSyncService;
 use App\Services\Queue\QueueRouteResolver;
 use App\Services\Queue\WorkerHeartbeatService;
 use Illuminate\Bus\Queueable;
@@ -65,12 +64,6 @@ class SyncAppointmentJob implements ShouldQueue
     use InteractsWithQueueAttributes;
 
     /**
-     * Prefix used to embed the Google Calendar event ID in appointment notes.
-     * Format: "geid:{google_event_id}|{any other notes}"
-     */
-    private const GEID_PREFIX = 'geid:';
-
-    /**
      * @param  Appointment  $appointment  The appointment to sync (Eloquent model — serialised safely)
      */
     public function __construct(
@@ -89,8 +82,7 @@ class SyncAppointmentJob implements ShouldQueue
      * integrations from running in the same attempt.
      */
     public function handle(
-        GoogleCalendarService $calendar,
-        GoogleSheetsService $sheets,
+        AppointmentSyncService $appointmentSyncService,
         WorkerHeartbeatService $workerHeartbeatService,
     ): void {
         $workerHeartbeatService->beat(
@@ -111,210 +103,10 @@ class SyncAppointmentJob implements ShouldQueue
             return;
         }
 
-        $business = $appointment->business;
+        $appointmentSyncService->sync($appointment);
 
-        $failures = [];
-
-        // ------------------------------------------------------------------
-        // Google Calendar sync
-        // ------------------------------------------------------------------
-        if ($business->isCalendarEnabled() && !$appointment->synced_to_calendar) {
-            try {
-                $this->syncToCalendar($calendar, $business, $appointment);
-
-                $appointment->synced_to_calendar = true;
-                $appointment->saveQuietly();
-
-                Log::info('SyncAppointmentJob: calendar sync succeeded.', [
-                    'appointment_id' => $appointment->id,
-                ]);
-            } catch (\Throwable $e) {
-                Log::error('SyncAppointmentJob: calendar sync failed.', [
-                    'appointment_id' => $appointment->id,
-                    'error'          => $e->getMessage(),
-                ]);
-
-                $failures[] = 'google_calendar';
-            }
-        } elseif ($business->isCalendarEnabled() && $appointment->synced_to_calendar) {
-            // Already synced — run an update to reflect any status/time changes
-            try {
-                $this->updateCalendar($calendar, $business, $appointment);
-
-                Log::info('SyncAppointmentJob: calendar update succeeded.', [
-                    'appointment_id' => $appointment->id,
-                ]);
-            } catch (\Throwable $e) {
-                Log::error('SyncAppointmentJob: calendar update failed.', [
-                    'appointment_id' => $appointment->id,
-                    'error'          => $e->getMessage(),
-                ]);
-
-                $failures[] = 'google_calendar_update';
-            }
-        }
-
-        // ------------------------------------------------------------------
-        // Google Sheets sync
-        // ------------------------------------------------------------------
-        if ($business->isSheetsEnabled() && !$appointment->synced_to_sheets) {
-            try {
-                $sheets->appendRow($business, $appointment);
-
-                $appointment->synced_to_sheets = true;
-                $appointment->saveQuietly();
-
-                Log::info('SyncAppointmentJob: sheets sync succeeded.', [
-                    'appointment_id' => $appointment->id,
-                ]);
-            } catch (\Throwable $e) {
-                Log::error('SyncAppointmentJob: sheets sync failed.', [
-                    'appointment_id' => $appointment->id,
-                    'error'          => $e->getMessage(),
-                ]);
-
-                $failures[] = 'google_sheets';
-            }
-        } elseif ($business->isSheetsEnabled() && $appointment->synced_to_sheets) {
-            // Already synced — update the row to reflect current status
-            try {
-                $sheets->updateRow($business, $appointment);
-
-                Log::info('SyncAppointmentJob: sheets update succeeded.', [
-                    'appointment_id' => $appointment->id,
-                ]);
-            } catch (\Throwable $e) {
-                Log::error('SyncAppointmentJob: sheets update failed.', [
-                    'appointment_id' => $appointment->id,
-                    'error'          => $e->getMessage(),
-                ]);
-
-                $failures[] = 'google_sheets_update';
-            }
-        }
-
-        // ------------------------------------------------------------------
-        // Re-throw if any service failed so the queue worker retries
-        // ------------------------------------------------------------------
-        if (!empty($failures)) {
-            throw new \RuntimeException(
-                'SyncAppointmentJob: the following integrations failed and will be retried: '
-                . implode(', ', $failures)
-                . ' — appointment #' . $appointment->id,
-            );
-        }
-    }
-
-    // -------------------------------------------------------------------------
-    // Calendar routing helpers
-    // -------------------------------------------------------------------------
-
-    /**
-     * Route a first-time calendar sync: createEvent for confirmed,
-     * deleteEvent for cancelled.
-     *
-     * The Google event ID is embedded in appointment.notes using the
-     * "geid:{id}|" prefix so we can retrieve it for updates/deletes
-     * without adding a dedicated database column.
-     *
-     * @param  GoogleCalendarService               $calendar
-     * @param  \App\Models\Business                $business
-     * @param  Appointment                         $appointment
-     *
-     * @throws \RuntimeException Propagated from GoogleCalendarService
-     */
-    private function syncToCalendar(
-        GoogleCalendarService $calendar,
-        \App\Models\Business $business,
-        Appointment $appointment,
-    ): void {
-        if ($appointment->status === 'cancelled') {
-            // Nothing to create for a new cancelled appointment
-            return;
-        }
-
-        $googleEventId = $calendar->createEvent($business, $appointment);
-
-        // Embed the event ID in notes using our prefix convention
-        $existingNotes = $this->stripGeid($appointment->notes ?? '');
-        $appointment->notes = self::GEID_PREFIX . $googleEventId
-            . ($existingNotes !== '' ? '|' . $existingNotes : '');
-
-        $appointment->saveQuietly();
-    }
-
-    /**
-     * Route a re-sync: updateEvent for active, deleteEvent for cancelled.
-     *
-     * @param  GoogleCalendarService               $calendar
-     * @param  \App\Models\Business                $business
-     * @param  Appointment                         $appointment
-     *
-     * @throws \RuntimeException Propagated from GoogleCalendarService
-     */
-    private function updateCalendar(
-        GoogleCalendarService $calendar,
-        \App\Models\Business $business,
-        Appointment $appointment,
-    ): void {
-        $googleEventId = $this->extractGeid($appointment->notes ?? '');
-
-        if ($googleEventId === '') {
-            Log::warning('SyncAppointmentJob: no google_event_id found in notes; skipping calendar update.', [
-                'appointment_id' => $appointment->id,
-            ]);
-
-            return;
-        }
-
-        if ($appointment->status === 'cancelled') {
-            $calendar->deleteEvent($business, $googleEventId);
-        } else {
-            $calendar->updateEvent($business, $appointment, $googleEventId);
-        }
-    }
-
-    // -------------------------------------------------------------------------
-    // Notes helpers for event ID embedding
-    // -------------------------------------------------------------------------
-
-    /**
-     * Extract the Google event ID from the notes field.
-     *
-     * Returns an empty string when no event ID prefix is found.
-     *
-     * @param  string  $notes
-     */
-    private function extractGeid(string $notes): string
-    {
-        if (!str_starts_with($notes, self::GEID_PREFIX)) {
-            return '';
-        }
-
-        $withoutPrefix = substr($notes, strlen(self::GEID_PREFIX));
-        $pipePos       = strpos($withoutPrefix, '|');
-
-        return $pipePos !== false
-            ? substr($withoutPrefix, 0, $pipePos)
-            : $withoutPrefix;
-    }
-
-    /**
-     * Return the notes string with the "geid:{id}|" prefix stripped,
-     * leaving only the human-readable notes portion.
-     *
-     * @param  string  $notes
-     */
-    private function stripGeid(string $notes): string
-    {
-        if (!str_starts_with($notes, self::GEID_PREFIX)) {
-            return $notes;
-        }
-
-        $pipePos = strpos($notes, '|');
-
-        return $pipePos !== false
-            ? substr($notes, $pipePos + 1)
-            : '';
+        Log::info('SyncAppointmentJob: sync completed.', [
+            'appointment_id' => $appointment->id,
+        ]);
     }
 }
